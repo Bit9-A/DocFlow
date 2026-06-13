@@ -7,7 +7,7 @@ import type { DocFlowSchema, DocBlock, TableColumn } from '@docflow/core';
 // ${loopOverVar[idx]?.field} for table cell values.
 // ============================================================
 
-function cleanText(text: string, tableCtx?: { loopOver: string; itemVar: string }): string {
+export function cleanText(text: string, tableCtx?: { loopOver: string; itemVar: string }): string {
   if (text.includes('{{')) {
     const jsTemplate = text.replace(/\{\{([^}]+)\}\}/g, (_, path) => {
       const trimmed = path.trim();
@@ -33,7 +33,7 @@ function cleanText(text: string, tableCtx?: { loopOver: string; itemVar: string 
 // with table-aware array generation.
 // ============================================================
 
-function extractVariables(ast: DocBlock[]): Record<string, any> {
+export function extractVariables(ast: DocBlock[]): Record<string, any> {
   const vars: Record<string, any> = {};
   const regex = /\{\{([^}]+)\}\}/g;
 
@@ -124,7 +124,7 @@ function extractVariables(ast: DocBlock[]): Record<string, any> {
 // + AST-extracted mock variables
 // ============================================================
 
-function buildExportData(
+export function buildExportData(
   schema: DocFlowSchema,
   astVariables: Record<string, any>,
 ): Record<string, any> {
@@ -166,7 +166,7 @@ function buildExportData(
 // Block-to-code renderer
 // ============================================================
 
-function renderBlockToCode(block: DocBlock, schema: DocFlowSchema, indent: string, yOffsetExpr?: string): string {
+export function renderBlockToCode(block: DocBlock, schema: DocFlowSchema, indent: string, yOffsetExpr?: string): string {
   let code = '';
   switch (block.type) {
     case 'heading': {
