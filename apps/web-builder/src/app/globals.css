@@ -1,0 +1,205 @@
+@import "tailwindcss";
+
+:root {
+  --font-inter: 'Inter', sans-serif;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+  --panel-transition: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --drawer-width: 280px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Smooth scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Canvas scrollbar (light mode since it's white paper) */
+.docflow-canvas::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+
+.docflow-canvas::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+}
+
+/* contentEditable focus ring reset */
+[contenteditable]:focus {
+  outline: none;
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Drag overlay smooth shadow */
+.drag-overlay {
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================
+   Responsive panel animations
+   ============================================================ */
+
+/* Slide from left (toolbar) */
+.panel-slide-left {
+  transition: transform var(--panel-transition);
+}
+.panel-slide-left.closed {
+  transform: translateX(-100%);
+}
+
+/* Slide from right (inspector) */
+.panel-slide-right {
+  transition: transform var(--panel-transition);
+}
+.panel-slide-right.closed {
+  transform: translateX(100%);
+}
+
+/* Overlay backdrop for mobile drawers */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--panel-transition);
+}
+.drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile drawer panel */
+.mobile-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  background: #1a1a2e;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  width: var(--drawer-width);
+  transition: transform var(--panel-transition);
+  overflow-y: auto;
+}
+.mobile-drawer.left {
+  left: 0;
+  border-left: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.mobile-drawer.right {
+  right: 0;
+}
+.mobile-drawer.closed {
+  transform: translateX(100%);
+}
+.mobile-drawer.left.closed {
+  transform: translateX(-100%);
+}
+
+/* Floating action button for mobile */
+.fab-toolbar {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 30;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #6366f1;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  cursor: pointer;
+  transition: all 200ms ease;
+  border: none;
+}
+.fab-toolbar:hover {
+  background: #4f46e5;
+  transform: scale(1.05);
+}
+.fab-toolbar:active {
+  transform: scale(0.95);
+}
+
+/* Responsive canvas */
+.canvas-container {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* Prevent body scroll when mobile drawer is open */
+body.drawer-open {
+  overflow: hidden;
+}
+
+/* Paper responsive sizing */
+.paper-container {
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+@media (max-width: 640px) {
+  .paper-container {
+    padding: 12px 8px;
+  }
+}
+
+/* Editor header responsive */
+@media (max-width: 768px) {
+  .header-actions-desktop {
+    display: none;
+  }
+}
+@media (min-width: 769px) {
+  .header-actions-mobile {
+    display: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "name": "@docflow/core",
+  "version": "0.1.0",
+  "description": "DocFlow rendering engine — AST to PDF/HTML compiler",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./validator": {
+      "import": {
+        "types": "./dist/schema/validator.d.ts",
+        "default": "./dist/schema/validator.js"
+      },
+      "require": {
+        "types": "./dist/schema/validator.d.cts",
+        "default": "./dist/schema/validator.cjs"
+      }
+    },
+    "./constants": {
+      "import": {
+        "types": "./dist/constants.d.ts",
+        "default": "./dist/constants.js"
+      },
+      "require": {
+        "types": "./dist/constants.d.cts",
+        "default": "./dist/constants.cjs"
+      }
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "pdfkit": "^0.15.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@docflow/ts-config": "workspace:*",
+    "@types/node": "^22.10.7",
+    "@types/pdfkit": "^0.13.9",
+    "@vitest/coverage-v8": "^3.0.4",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}
