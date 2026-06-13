@@ -36,6 +36,12 @@ interface UIState {
   setExportOpen: (open: boolean) => void;
   setBreakpoint: (bp: Breakpoint) => void;
 
+  // Page navigation
+  currentPageView: number;
+  setCurrentPageView: (page: number) => void;
+  pageInsertAfterId: string | null;
+  setPageInsertAfterId: (id: string | null) => void;
+
   // Close all mobile panels
   closeAllMobile: () => void;
 }
@@ -73,6 +79,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ isPreviewOpen: open, ...(tab !== undefined && { previewTab: tab }) }),
   setExportOpen: (open) => set({ isExportOpen: open }),
   setBreakpoint: (bp) => set({ breakpoint: bp }),
+
+  currentPageView: 0,
+  setCurrentPageView: (page) => set({ currentPageView: page }),
+  pageInsertAfterId: null,
+  setPageInsertAfterId: (id) => set({ pageInsertAfterId: id }),
 
   closeAllMobile: () =>
     set({ isMobileToolbarOpen: false, isMobileInspectorOpen: false }),

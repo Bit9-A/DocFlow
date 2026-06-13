@@ -110,11 +110,12 @@ export function EditorHeader() {
   return (
     <header className="h-12 bg-[#0d0d1f] border-b border-white/10 flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0 no-print">
       {/* Logo */}
-      <div className="flex items-center gap-1.5 md:gap-2 mr-1 md:mr-2 flex-shrink-0">
-        <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center">
-          <ZapIcon size={12} className="text-white" />
-        </div>
-        <h1 className="text-sm font-bold text-white tracking-tight hidden sm:block">DocFlow</h1>
+      <div className="flex items-center gap-1.5 md:gap-2 mr-1 md:mr-2 flex-shrink-0 p-1.5" >
+        <img
+          src="/logo.svg"
+          alt="DocFlow"
+          className="h-10 w-auto"
+        />
       </div>
 
       <div className="w-px h-5 bg-white/10 hidden sm:block" />

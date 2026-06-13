@@ -1,8 +1,10 @@
 'use client';
 
-import type { DocBlock } from '@docflow/core';
+import type { DocBlock, TableColumn } from '@docflow/core';
+import { interpolate, resolvePayload } from '@docflow/core/parser/interpolate';
 import { useDocumentStore } from '@/store/useDocumentStore';
-import { useState } from 'react';
+import { buildPreviewData } from '@/lib/buildPreviewData';
+import { useState, useMemo } from 'react';
 import { Autocomplete } from '../ui/Autocomplete';
 
 interface BlockRendererProps {
@@ -12,6 +14,10 @@ interface BlockRendererProps {
 
 export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererProps) {
   const updateBlock = useDocumentStore((s) => s.updateBlock);
+  const metadata = useDocumentStore((s) => s.metadata);
+
+  // Build resolved preview data from custom variables + uploaded JSON
+  const previewData = useMemo(() => buildPreviewData(metadata), [metadata]);
 
   const [acState, setAcState] = useState<{
     show: boolean;
@@ -111,12 +117,13 @@ export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererP
         'aria-label': `Heading level ${block.level}, editable`,
       };
 
-      if (block.level === 1) return <h1 {...commonProps}>{block.text}</h1>;
-      if (block.level === 2) return <h2 {...commonProps}>{block.text}</h2>;
-      if (block.level === 3) return <h3 {...commonProps}>{block.text}</h3>;
-      if (block.level === 4) return <h4 {...commonProps}>{block.text}</h4>;
-      if (block.level === 5) return <h5 {...commonProps}>{block.text}</h5>;
-      return <h6 {...commonProps}>{block.text}</h6>;
+      const headingText = interpolate(block.text, previewData);
+      if (block.level === 1) return <h1 {...commonProps}>{headingText}</h1>;
+      if (block.level === 2) return <h2 {...commonProps}>{headingText}</h2>;
+      if (block.level === 3) return <h3 {...commonProps}>{headingText}</h3>;
+      if (block.level === 4) return <h4 {...commonProps}>{headingText}</h4>;
+      if (block.level === 5) return <h5 {...commonProps}>{headingText}</h5>;
+      return <h6 {...commonProps}>{headingText}</h6>;
     }
 
 
@@ -139,76 +146,29 @@ export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererP
           className="outline-none w-full cursor-text min-h-[1.5em] text-sm leading-relaxed"
           aria-label="Paragraph, editable"
         >
-          {block.text}
+          {interpolate(block.text, previewData)}
         </p>
       );
 
     case 'table':
-      return (
-        <div className="overflow-x-auto my-2">
-          <table
-            className="w-full text-xs border-collapse"
-            style={{ fontSize: block.styles.fontSize }}
-            aria-label="Table block preview"
-          >
-            <thead>
-              <tr>
-                {block.columns.map((col, i) => (
-                  <th
-                    key={i}
-                    style={{
-                      width: col.width,
-                      background: block.styles.headerBg ?? '#F3F4F6',
-                      color: block.styles.headerColor ?? '#111827',
-                      border: `${block.styles.borderWidth ?? 1}px solid ${block.styles.borderColor ?? '#E5E7EB'}`,
-                      padding: `${block.styles.cellPadding ?? 8}px`,
-                      textAlign: col.align ?? 'left',
-                    }}
-                  >
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                {block.columns.map((col, i) => (
-                  <td
-                    key={i}
-                    style={{
-                      border: `${block.styles.borderWidth ?? 1}px solid ${block.styles.borderColor ?? '#E5E7EB'}`,
-                      padding: `${block.styles.cellPadding ?? 8}px`,
-                      color: '#6B7280',
-                      textAlign: col.align ?? 'left',
-                    }}
-                    className="italic"
-                  >
-                    {col.value}
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-          <p className="text-[10px] text-gray-400 mt-1">
-            Loops over: <code className="font-mono">{block.loopOver}</code>
-          </p>
-        </div>
-      );
+      return <TablePreviewRenderer block={block} previewData={previewData} />;
 
     case 'image': {
       const imgWidth = block.width !== undefined ? `${block.width}px` : (typeof block.styles.width === 'number' ? `${block.styles.width}px` : (block.styles.width ?? '100%'));
       const imgHeight = block.height !== undefined ? `${block.height}px` : (typeof block.styles.height === 'number' ? `${block.styles.height}px` : 'auto');
+      const resolvedSrc = interpolate(block.src, previewData);
+      const resolvedAlt = interpolate(block.alt, previewData);
 
       return (
         <div 
           style={{ width: imgWidth, height: imgHeight }} 
           className="flex items-center justify-center border border-dashed border-gray-200 rounded bg-gray-50 overflow-hidden"
         >
-          {block.src ? (
+          {resolvedSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={block.src}
-              alt={block.alt}
+              src={resolvedSrc}
+              alt={resolvedAlt}
               className="w-full h-full object-contain"
             />
           ) : (
@@ -295,7 +255,8 @@ export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererP
           {block.blocks && block.blocks.length > 0 ? (
             <div className="space-y-1.5 pt-1">
               {block.blocks.map((sub, i) => {
-                const textVal = (sub as any).text ?? '';
+                const rawText = (sub as any).text ?? '';
+                const textVal = interpolate(rawText, previewData);
                 const subStyles = (sub.styles ?? {}) as any;
                 const align = subStyles.textAlign ?? 'center';
                 const color = subStyles.color ?? 'inherit';
@@ -347,5 +308,95 @@ export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererP
         />
       )}
     </>
+  );
+}
+
+// ============================================================
+// Table Preview Renderer
+// Renders actual data rows if loopOver resolves in previewData,
+// otherwise shows a single sample row with raw templates.
+// ============================================================
+
+interface TablePreviewRendererProps {
+  block: Extract<DocBlock, { type: 'table' }>;
+  previewData: Record<string, unknown>;
+}
+
+function TablePreviewRenderer({ block, previewData }: TablePreviewRendererProps) {
+  const items = resolvePayload(block.loopOver, previewData);
+  const hasArrayData = Array.isArray(items) && items.length > 0;
+
+  const cellStyle = (): React.CSSProperties => ({
+    border: `${block.styles.borderWidth ?? 1}px solid ${block.styles.borderColor ?? '#E5E7EB'}`,
+    padding: `${block.styles.cellPadding ?? 8}px`,
+    textAlign: 'left' as const,
+  });
+
+  const stripeColor = block.styles.stripedRows ? (block.styles.stripedColor ?? '#F3F4F6') : undefined;
+
+  const renderCell = (col: TableColumn, rowData?: Record<string, unknown>) => {
+    if (rowData !== undefined) {
+      return interpolate(col.value, { ...previewData, item: rowData });
+    }
+    // No data available — show raw template or unresolved fallback
+    return col.value;
+  };
+
+  const previewRows = hasArrayData
+    ? (items as Record<string, unknown>[])
+    : [undefined]; // one sample row when no data
+
+  return (
+    <div className="overflow-x-auto my-2">
+      <table
+        className="w-full text-xs border-collapse"
+        style={{ fontSize: block.styles.fontSize }}
+        aria-label="Table block preview"
+      >
+        <thead>
+          <tr>
+            {block.columns.map((col, i) => (
+              <th
+                key={i}
+                style={{
+                  width: col.width,
+                  background: block.styles.headerBg ?? '#F3F4F6',
+                  color: block.styles.headerColor ?? '#111827',
+                  ...cellStyle(),
+                }}
+              >
+                {col.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {previewRows.map((rowData, rowIdx) => (
+            <tr
+              key={rowIdx}
+              style={
+                stripeColor !== undefined && rowIdx % 2 === 1
+                  ? { background: stripeColor }
+                  : undefined
+              }
+            >
+              {block.columns.map((col, colIdx) => (
+                <td key={colIdx} style={{ ...cellStyle(), textAlign: col.align ?? 'left' } as React.CSSProperties}>
+                  {renderCell(col, rowData)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-[10px] text-gray-400 mt-1">
+        Loops over: <code className="font-mono">{block.loopOver}</code>
+        {hasArrayData && (
+          <span className="text-indigo-400 ml-2">
+            ({items.length} row{items.length !== 1 ? 's' : ''} in preview)
+          </span>
+        )}
+      </p>
+    </div>
   );
 }

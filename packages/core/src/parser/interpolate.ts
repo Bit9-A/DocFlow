@@ -25,12 +25,14 @@ const INTERPOLATION_REGEX = /\{\{(.*?)\}\}/g;
 
 /**
  * Resolves a dot-notation path against an object.
- * Returns empty string for any invalid/missing access.
+ * Returns the raw resolved value (preserves arrays and other types)
+ * or empty string for any invalid/missing access.
+ * Callers that need a string must coerce explicitly.
  */
 export function resolvePayload(
   path: string,
   obj: Record<string, unknown>,
-): string {
+): unknown {
   const segments = path.trim().split('.');
 
   if (segments.length > MAX_PATH_DEPTH) {
@@ -65,7 +67,7 @@ export function resolvePayload(
     return '';
   }
 
-  return String(current);
+  return current;
 }
 
 /**
@@ -81,7 +83,9 @@ export function interpolate(
   data: Record<string, unknown>,
 ): string {
   return template.replace(INTERPOLATION_REGEX, (_, match: string) => {
-    return resolvePayload(match, data);
+    const resolved = resolvePayload(match, data);
+    if (resolved === null || resolved === undefined) return '';
+    return String(resolved);
   });
 }
 
@@ -94,7 +98,9 @@ export function interpolateHtml(
   data: Record<string, unknown>,
 ): string {
   return template.replace(INTERPOLATION_REGEX, (_, match: string) => {
-    return escapeHtml(resolvePayload(match, data));
+    const resolved = resolvePayload(match, data);
+    if (resolved === null || resolved === undefined) return '';
+    return escapeHtml(String(resolved));
   });
 }
 

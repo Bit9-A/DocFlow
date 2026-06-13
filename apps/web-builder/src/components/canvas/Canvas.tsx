@@ -1,10 +1,35 @@
 'use client';
 
 import { useDocumentStore } from '@/store/useDocumentStore';
+import { useUIStore } from '@/store/useUIStore';
 import { SortableBlock } from './SortableBlock';
 import { EmptyCanvas } from './EmptyCanvas';
 import { PAGE_SIZES } from '@docflow/core/constants';
-import { useEffect, useState, useRef } from 'react';
+import type { DocBlock, DocBlockType } from '@docflow/core';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+
+// ============================================================
+// Virtual page helpers
+// Split the flat block list into pages by page-break boundaries.
+// ============================================================
+
+function getVirtualPages(blocks: DocBlock[]): DocBlock[][] {
+  const pages: DocBlock[][] = [];
+  let current: DocBlock[] = [];
+
+  for (const block of blocks) {
+    if (block.type === 'page-break') {
+      pages.push(current);
+      current = [];
+    } else {
+      current.push(block);
+    }
+  }
+  // Always push the last page (even if empty)
+  pages.push(current);
+
+  return pages;
+}
 
 export function Canvas() {
   const ast = useDocumentStore((s) => s.ast);
@@ -12,8 +37,16 @@ export function Canvas() {
   const selectedBlockId = useDocumentStore((s) => s.selectedBlockId);
   const selectBlock = useDocumentStore((s) => s.selectBlock);
   const updateMetadata = useDocumentStore((s) => s.updateMetadata);
+  const addBlock = useDocumentStore((s) => s.addBlock);
+
+  const currentPageView = useUIStore((s) => s.currentPageView);
+  const setCurrentPageView = useUIStore((s) => s.setCurrentPageView);
+  const setPageInsertAfterId = useUIStore((s) => s.setPageInsertAfterId);
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const paperRef = useRef<HTMLElement>(null);
   const [paperScale, setPaperScale] = useState(1);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Page size dimensions (in points)
   const sizeTuple = PAGE_SIZES[metadata.pageSize] || PAGE_SIZES.LETTER;
@@ -29,7 +62,6 @@ export function Canvas() {
 
     function calculateScale() {
       if (!containerRef.current) return;
-      // Available width = container width minus padding
       const availableWidth = containerRef.current.clientWidth - 32;
       if (availableWidth < paperWidth) {
         const newScale = Math.max(0.35, availableWidth / paperWidth);
@@ -53,21 +85,157 @@ export function Canvas() {
     transformOrigin: 'top center',
   };
 
-  // The wrapper height accounts for scaled paper
   const wrapperStyle: React.CSSProperties = paperScale < 1
     ? { height: `${paperHeight * paperScale + 48}px` }
     : {};
 
-  const marginStyle = {
-    paddingTop: `${metadata.margins.top}px`,
-    paddingBottom: `${metadata.margins.bottom}px`,
-    paddingLeft: `${metadata.margins.left}px`,
-    paddingRight: `${metadata.margins.right}px`,
-  };
-
   const headerBlock = ast.find((b) => b.type === 'header');
   const footerBlock = ast.find((b) => b.type === 'footer');
-  const mainBlocks = ast.filter((b) => b.type !== 'header' && b.type !== 'footer');
+  const mainBlocks = useMemo(
+    () => ast.filter((b) => b.type !== 'header' && b.type !== 'footer'),
+    [ast],
+  );
+
+  // ── Virtual pages ──────────────────────────────────────
+  const virtualPages = useMemo(() => getVirtualPages(mainBlocks), [mainBlocks]);
+  const totalPages = virtualPages.length;
+  const safePageIdx = Math.min(currentPageView, totalPages - 1);
+  const currentPageBlocks = virtualPages[safePageIdx] ?? [];
+
+  // ── Page actions ───────────────────────────────────────
+  const handleAddPage = useCallback(() => {
+    // Append a page-break at the very end of the AST,
+    // then navigate to the new empty page.
+    addBlock('page-break');
+    setCurrentPageView(totalPages);
+  }, [addBlock, setCurrentPageView, totalPages]);
+
+  const handleRemovePage = useCallback(() => {
+    if (totalPages <= 1) return;
+    // Remove all blocks on current page + the preceding page-break
+    const state = useDocumentStore.getState();
+    const currentAst = state.ast;
+    const allBlocks = currentAst.filter((b) => b.type !== 'header' && b.type !== 'footer');
+    const pageBreaks: number[] = [];
+    allBlocks.forEach((b, i) => {
+      if (b.type === 'page-break') pageBreaks.push(i);
+    });
+
+    // Build list of block IDs to remove (current page blocks + boundary page-break)
+    const startIdx = safePageIdx === 0 ? 0 : (pageBreaks[safePageIdx - 1] ?? -1) + 1;
+    const endIdx = safePageIdx < pageBreaks.length ? pageBreaks[safePageIdx] : allBlocks.length;
+
+    const idsToRemove = new Set<string>();
+    for (let i = startIdx; i < endIdx; i++) {
+      idsToRemove.add(allBlocks[i]!.id);
+    }
+    // Also remove the trailing page-break if it's not the last block
+    if (safePageIdx < pageBreaks.length && endIdx < allBlocks.length) {
+      idsToRemove.add(allBlocks[endIdx]!.id);
+    }
+
+    // Remove blocks from ast
+    const newAst = currentAst.filter((b) => !idsToRemove.has(b.id));
+    useDocumentStore.setState({ ast: newAst });
+
+    // Navigate to previous page (or stay at 0)
+    setCurrentPageView(Math.max(0, safePageIdx - 1));
+  }, [totalPages, safePageIdx, setCurrentPageView]);
+
+  // Reset page view if it exceeds total (e.g. after page deletion from undo)
+  useEffect(() => {
+    if (safePageIdx !== currentPageView) {
+      setCurrentPageView(safePageIdx);
+    }
+  }, [safePageIdx, currentPageView, setCurrentPageView]);
+
+  // Find the correct insertion point for new blocks:
+  // - If current page has blocks → insert after the last block on this page
+  // - If current page is empty but NOT page 0 → insert AFTER the preceding page-break
+  // - Otherwise → append to end (page 0 with no blocks)
+  const insertAfterId = useMemo<string | undefined>(() => {
+    if (currentPageBlocks.length > 0) {
+      return currentPageBlocks[currentPageBlocks.length - 1]!.id;
+    }
+    // Empty page: insert after the page-break that starts this page
+    if (safePageIdx > 0) {
+      // The (safePageIdx-1)th page-break in mainBlocks is the boundary
+      let breakCount = 0;
+      for (const b of mainBlocks) {
+        if (b.type === 'page-break') {
+          if (breakCount === safePageIdx - 1) return b.id;
+          breakCount++;
+        }
+      }
+    }
+    return undefined;
+  }, [currentPageBlocks, safePageIdx, mainBlocks]);
+
+  // Sync the insert context so BlockToolbar (outside Canvas) inserts on current page
+  useEffect(() => {
+    setPageInsertAfterId(insertAfterId ?? null);
+  }, [insertAfterId, setPageInsertAfterId]);
+
+  // ── Drag-from-toolbar handlers ────────────────────────
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/docflow-block-type')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    },
+    [],
+  );
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/docflow-block-type')) {
+      e.preventDefault();
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+
+      const blockType = e.dataTransfer.getData('application/docflow-block-type') as DocBlockType;
+      if (!blockType) return;
+
+      const paperEl = paperRef.current;
+      if (!paperEl) {
+        addBlock(blockType, insertAfterId);
+        return;
+      }
+
+      const paperRect = paperEl.getBoundingClientRect();
+      const scale = paperScale;
+
+      const relX = (e.clientX - paperRect.left) / scale;
+      const relY = (e.clientY - paperRect.top) / scale;
+
+      const x = Math.max(metadata.margins.left, Math.min(relX, paperWidth - metadata.margins.right - 100));
+      const y = Math.max(metadata.margins.top, Math.min(relY, paperHeight - metadata.margins.bottom - 50));
+
+      addBlock(blockType, insertAfterId);
+      const newBlockId = useDocumentStore.getState().selectedBlockId;
+      if (newBlockId !== null) {
+        useDocumentStore.getState().updateBlock(newBlockId, { x, y });
+      }
+
+      const announcer = document.getElementById('canvas-announcer');
+      if (announcer !== null) {
+        announcer.textContent = `Placed new ${blockType} block at position ${Math.round(x)}, ${Math.round(y)}`;
+      }
+    },
+    [paperScale, paperWidth, paperHeight, metadata.margins, addBlock, insertAfterId],
+  );
 
   const handleHeaderResizeStart = (e: React.PointerEvent) => {
     e.stopPropagation();
@@ -126,7 +294,7 @@ export function Canvas() {
   return (
     <main
       ref={containerRef}
-      className="flex-1 bg-[#0f0f23] overflow-auto docflow-canvas"
+      className="flex-1 bg-[#0f0f23] docflow-canvas flex flex-col overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) selectBlock(null);
       }}
@@ -140,18 +308,77 @@ export function Canvas() {
         id="canvas-announcer"
       />
 
-      <div className="flex justify-center py-8 md:py-12 px-2 md:px-6" style={wrapperStyle}>
-        {/* The paper */}
+      {/* ── Page Navigation Bar ─────────────────────────────── */}
+      <div className="flex items-center justify-center gap-1.5 px-3 py-2 border-b border-white/10 bg-[#151530] shrink-0">
+        <div className="flex items-center gap-1">
+          {virtualPages.map((_page, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentPageView(idx)}
+              className={`
+                px-3 py-1 text-xs font-semibold rounded-lg transition-all
+                ${idx === safePageIdx
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'
+                }
+              `}
+              aria-label={`Go to page ${idx + 1}`}
+              aria-current={idx === safePageIdx ? 'page' : undefined}
+            >
+              {idx + 1}
+            </button>
+          ))}
+        </div>
+
+        <span className="text-[10px] text-white/30 mx-1">|</span>
+
+        <button
+          onClick={handleAddPage}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600/70 hover:bg-indigo-500 text-white text-xs font-semibold transition-all active:scale-95"
+          aria-label="Add new page"
+        >
+          + Add Page
+        </button>
+
+        {totalPages > 1 && (
+          <button
+            onClick={handleRemovePage}
+            className="px-2 py-1 rounded-lg text-white/40 hover:text-red-400 hover:bg-white/5 text-xs transition-all"
+            aria-label="Remove current page"
+            title="Remove this page and its content"
+          >
+            ✕
+          </button>
+        )}
+
+        {totalPages > 0 && (
+          <span className="text-[10px] text-white/30 ml-1">
+            Page {safePageIdx + 1} of {totalPages}
+          </span>
+        )}
+      </div>
+
+      <div className="flex justify-center py-8 md:py-12 px-2 md:px-6 flex-1 overflow-auto" style={wrapperStyle}>
+        {/* The paper — also drop target */}
         <section
+          ref={paperRef}
           style={pageStyle}
-          className="bg-white shadow-2xl shadow-black/40 relative select-none overflow-hidden flex-shrink-0"
+          className={`
+            bg-white shadow-2xl shadow-black/40 relative select-none overflow-hidden flex-shrink-0
+            transition-shadow duration-200
+            ${isDragOver ? 'shadow-indigo-500/30 ring-2 ring-indigo-400/50' : ''}
+          `}
           role="region"
           aria-label="Document page"
           onClick={(e) => {
             if (e.target === e.currentTarget) selectBlock(null);
           }}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          {/* Visual Margins Guide (Word-like dashed guide) */}
+          {/* Visual Margins Guide */}
           <div
             style={{
               position: 'absolute',
@@ -165,7 +392,21 @@ export function Canvas() {
             aria-hidden="true"
           />
 
-          {/* Absolute Header (Word-like) */}
+          {/* Drop zone overlay indicator */}
+          {isDragOver && (
+            <div
+              className="absolute inset-0 z-[150] pointer-events-none bg-indigo-500/5"
+              aria-hidden="true"
+            >
+              <div className="absolute inset-0 border-2 border-dashed border-indigo-400/30 m-4 rounded-lg flex items-center justify-center">
+                <span className="text-xs font-semibold text-indigo-400/60 bg-white px-3 py-1 rounded-full shadow-sm">
+                  Drop block here
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Absolute Header (Word-like) — appears on every page */}
           {headerBlock && (
             <div
               style={{
@@ -191,7 +432,6 @@ export function Canvas() {
                 selectBlock(headerBlock.id);
               }}
             >
-              {/* Header height drag handle */}
               {selectedBlockId === headerBlock.id && (
                 <div
                   onPointerDown={handleHeaderResizeStart}
@@ -219,13 +459,21 @@ export function Canvas() {
             </div>
           )}
 
+          {/* Current page blocks */}
           {mainBlocks.length === 0 && !headerBlock && !footerBlock ? (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-10">
               <EmptyCanvas />
             </div>
+          ) : currentPageBlocks.length === 0 && safePageIdx > 0 ? (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-10">
+              <div className="text-center text-gray-400">
+                <p className="text-sm text-gray-500 font-medium">Empty page</p>
+                <p className="text-[11px] text-gray-400 mt-1">Add blocks using the toolbar</p>
+              </div>
+            </div>
           ) : (
             <div className="absolute inset-0 pointer-events-none z-10">
-              {mainBlocks.map((block) => (
+              {currentPageBlocks.map((block) => (
                 <div key={block.id} className="pointer-events-auto">
                   <SortableBlock
                     block={block}
@@ -263,7 +511,6 @@ export function Canvas() {
                 selectBlock(footerBlock.id);
               }}
             >
-              {/* Footer height drag handle */}
               {selectedBlockId === footerBlock.id && (
                 <div
                   onPointerDown={handleFooterResizeStart}

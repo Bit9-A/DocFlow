@@ -218,6 +218,50 @@ body.drawer-open {
   }
 }
 
+/* ── Drag-and-drop visual enhancements ──────────────── */
+
+/* Snap grid indicator - subtle pulsing ring */
+.snap-active {
+  --snap-color: rgba(99, 102, 241, 0.15);
+  background-image:
+    radial-gradient(circle, var(--snap-color) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+/* Alignment guide lines drawn by SVG */
+.guide-line {
+  pointer-events: none;
+}
+
+/* Drag ghost chip (from toolbar) fading out */
+.toolbar-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  background: #6366f1;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font: 600 11px/1.4 sans-serif;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  transform: translate(-50%, -50%) scale(0.95);
+  opacity: 0.9;
+}
+
+/* Drop zone pulse animation */
+@keyframes drop-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+.drop-zone-active {
+  animation: drop-pulse 1.5s ease-in-out infinite;
+}
+
+/* Resize handle indicator */
+.resize-handle-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
 /* Print styles */
 @media print {
   .no-print {

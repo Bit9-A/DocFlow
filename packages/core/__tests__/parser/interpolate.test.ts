@@ -49,8 +49,8 @@ describe('resolvePayload', () => {
     expect(resolvePayload('a.b', d)).toBe('');
   });
 
-  it('coerces numbers to string', () => {
-    expect(resolvePayload('order.total', data)).toBe('1234.56');
+  it('returns the raw numeric value', () => {
+    expect(resolvePayload('order.total', data)).toBe(1234.56);
   });
 
   it('returns empty string when path exceeds MAX_PATH_DEPTH', () => {
@@ -106,6 +106,44 @@ describe('interpolate', () => {
   it('deduplicates repeated variables', () => {
     const result = interpolate('{{company}} - {{company}}', data);
     expect(result).toBe('DocFlow Inc. - DocFlow Inc.');
+  });
+});
+
+// ============================================================
+// interpolate — table context ({{item.field}} resolution)
+// ============================================================
+
+describe('interpolate — table context', () => {
+  const rowData = { name: 'Widget', price: '$10', sku: 'WID-001' };
+  const augmentedData = { ...data, item: rowData };
+
+  it('resolves {{item.field}} against the item key in data', () => {
+    expect(interpolate('{{item.name}}: {{item.price}}', augmentedData)).toBe('Widget: $10');
+  });
+
+  it('resolves nested path via {{item.nested.field}}', () => {
+    const d = {
+      ...data,
+      item: { profile: { displayName: 'Alice' } },
+    };
+    expect(interpolate('User: {{item.profile.displayName}}', d)).toBe('User: Alice');
+  });
+
+  it('returns empty string for missing {{item.missing}} field', () => {
+    expect(interpolate('Missing: {{item.missing}}', augmentedData)).toBe('Missing: ');
+  });
+
+  it('handles {{item.field}} alongside global {{data.field}} references', () => {
+    expect(interpolate('{{item.name}} in {{company}}', augmentedData)).toBe('Widget in DocFlow Inc.');
+  });
+
+  it('supports {{item}} alone (the entire row object)', () => {
+    const d = { ...data, item: { id: 'abc' } };
+    expect(interpolate('Row: {{item}}', d)).toBe('Row: [object Object]');
+  });
+
+  it('resolves {{item.field}} when item is undefined (empty string)', () => {
+    expect(interpolate('{{item.field}}', { ...data, item: {} })).toBe('');
   });
 });
 

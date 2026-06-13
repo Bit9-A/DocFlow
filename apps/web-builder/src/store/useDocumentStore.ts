@@ -187,7 +187,7 @@ export const useDocumentStore = create<DocumentState>()(
       },
       selectedBlockId: null,
 
-      addBlock: (type, _afterId) => {
+      addBlock: (type, afterId) => {
         const block = createDefaultBlock(type);
         const margins = get().metadata.margins;
 
@@ -251,7 +251,15 @@ export const useDocumentStore = create<DocumentState>()(
 
         set((state) => {
           const ast = [...state.ast];
-          return { ast: [...ast, block], selectedBlockId: block.id };
+          if (afterId) {
+            const idx = ast.findIndex((b) => b.id === afterId);
+            if (idx !== -1) {
+              ast.splice(idx + 1, 0, block);
+              return { ast, selectedBlockId: block.id };
+            }
+          }
+          // If no afterId or not found, just append
+          return { ast: [...state.ast, block], selectedBlockId: block.id };
         });
       },
 

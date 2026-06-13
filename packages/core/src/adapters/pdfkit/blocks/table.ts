@@ -134,13 +134,16 @@ function renderTable(block: TableBlock, ctx: PdfRenderContext): void {
   const arrayPath = block.loopOver;
   const items = resolvePayload(arrayPath, data);
 
-  if (!Array.isArray(items)) {
+  if (!Array.isArray(items) || items.length === 0) {
+    // No data available — render a single preview row with raw templates
+    // (consistent with canvas preview behavior)
     warnings.push({
       blockId: block.id,
-      code: 'TABLE_DATA_NOT_ARRAY',
-      message: `loopOver path "${arrayPath}" did not resolve to an array. Table skipped.`,
+      code: 'TABLE_NO_DATA',
+      message: !Array.isArray(items)
+        ? `loopOver path "${arrayPath}" did not resolve to an array. Showing preview row.`
+        : `loopOver path "${arrayPath}" resolved to an empty array. Showing preview row.`,
     });
-    return;
   }
 
   const fontSize = block.styles.fontSize ?? 10;
@@ -202,9 +205,19 @@ function renderTable(block: TableBlock, ctx: PdfRenderContext): void {
   const stripedRows = block.styles.stripedRows ?? false;
   const stripedColor = resolveColor(block.styles.stripedColor, '#F3F4F6');
 
-  items.forEach((item: unknown, rowIndex) => {
-    if (typeof item !== 'object' || item === null) return;
-    const rowData = item as Record<string, unknown>;
+  // Use actual data rows if available, otherwise render a single preview row
+  let dataRows: Record<string, unknown>[] = [{}]; // default: single preview row
+  if (Array.isArray(items) && items.length > 0) {
+    const filtered = (items as Record<string, unknown>[]).filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' && item !== null,
+    );
+    if (filtered.length > 0) {
+      dataRows = filtered;
+    }
+  }
+
+  dataRows.forEach((rowData, rowIndex) => {
 
     const rowHeight = estimateRowHeight(
       doc,

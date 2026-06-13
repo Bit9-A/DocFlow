@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description:
     'Design PDF and HTML documents visually using a block-based editor. Export as a portable JSON schema for programmatic rendering.',
   keywords: ['document builder', 'PDF generator', 'template designer', 'docflow'],
+  icons: {
+    icon: '/favicon.svg',
+  },
   openGraph: {
     title: 'DocFlow — Visual Document Designer',
     description: 'Design documents visually, compile to PDF or HTML.',

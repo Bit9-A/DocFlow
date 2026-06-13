@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Download, Loader2, AlertCircle, Eye, FileWarning } from 'lucide-react';
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { useUIStore } from '@/store/useUIStore';
+import { buildPreviewData } from '@/lib/buildPreviewData';
 
 export function PDFPreview() {
   const isPreviewOpen = useUIStore((s) => s.isPreviewOpen);
@@ -41,10 +42,11 @@ export function PDFPreview() {
     async function generate() {
       try {
         const schema = exportSchema();
+        const data = buildPreviewData(metadata);
         const response = await fetch('/api/render-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ schema, data: {} }),
+          body: JSON.stringify({ schema, data }),
         });
 
         if (!response.ok) {

@@ -13,6 +13,8 @@ import {
   Type,
 } from 'lucide-react';
 import { useDocumentStore } from '@/store/useDocumentStore';
+import { useUIStore } from '@/store/useUIStore';
+import { useCallback } from 'react';
 
 interface BlockOption {
   type: DocBlockType;
@@ -79,15 +81,35 @@ interface BlockToolbarProps {
 
 export function BlockToolbar({ afterBlockId, onClose }: BlockToolbarProps) {
   const addBlock = useDocumentStore((s) => s.addBlock);
+  const pageInsertAfterId = useUIStore((s) => s.pageInsertAfterId);
 
   function handleAdd(type: DocBlockType) {
-    addBlock(type, afterBlockId);
+    // Use the explicit afterBlockId (if given), fall back to current page context
+    const resolvedAfterId = afterBlockId ?? pageInsertAfterId ?? undefined;
+    addBlock(type, resolvedAfterId);
     const announcer = document.getElementById('canvas-announcer');
     if (announcer !== null) {
       announcer.textContent = `Added new ${type} block`;
     }
     onClose?.();
   }
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, type: DocBlockType) => {
+      e.dataTransfer.setData('application/docflow-block-type', type);
+      e.dataTransfer.effectAllowed = 'copy';
+
+      // Custom drag image: a small chip showing the block type
+      const ghost = document.createElement('div');
+      ghost.textContent = type;
+      ghost.style.cssText =
+        'position:fixed;top:-1000px;background:#6366f1;color:white;padding:6px 14px;border-radius:8px;font:12px/1 sans-serif;font-weight:600;pointer-events:none;';
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 40, 16);
+      setTimeout(() => document.body.removeChild(ghost), 0);
+    },
+    [],
+  );
 
   return (
     <aside
@@ -108,28 +130,41 @@ export function BlockToolbar({ afterBlockId, onClose }: BlockToolbarProps) {
             <li key={opt.type}>
               <button
                 onClick={() => handleAdd(opt.type)}
+                onDragStart={(e) => handleDragStart(e, opt.type)}
+                draggable
                 className="
                   w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left
                   text-white/70 hover:text-white hover:bg-white/10
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500
                   transition-all duration-150 group
+                  active:cursor-grabbing
+                  [&:active]:scale-[0.97]
                 "
-                title={opt.description}
+                title={`${opt.description} — drag to canvas or click to add`}
               >
-                <span className="text-indigo-400 group-hover:text-indigo-300 transition-colors flex-shrink-0">
+                <span className="text-indigo-400 group-hover:text-indigo-300 transition-colors flex-shrink-0 drag-handle">
                   {opt.icon}
                 </span>
-                <span className="text-sm font-medium">{opt.label}</span>
+                <span className="text-sm font-medium flex-1">{opt.label}</span>
+                <span className="text-[8px] text-white/20 group-hover:text-white/40 transition-colors hidden lg:inline">
+                  drag
+                </span>
               </button>
             </li>
           ))}
         </ul>
       </nav>
 
-      {/* Keyboard hint */}
+      {/* Drag hint */}
       <div className="px-4 py-2 border-t border-white/5 hidden lg:block">
-        <p className="text-[9px] text-white/20 text-center">
-          Press <kbd className="px-1 py-0.5 rounded bg-white/5 text-white/30 font-mono">⌘Z</kbd> to undo
+        <p className="text-[9px] text-white/20 text-center flex items-center justify-center gap-1">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+            <circle cx="3" cy="3" r="1.2" fill="currentColor"/>
+            <circle cx="7" cy="3" r="1.2" fill="currentColor"/>
+            <circle cx="3" cy="7" r="1.2" fill="currentColor"/>
+            <circle cx="7" cy="7" r="1.2" fill="currentColor"/>
+          </svg>
+          Drag blocks onto the canvas or click to add
         </p>
       </div>
     </aside>

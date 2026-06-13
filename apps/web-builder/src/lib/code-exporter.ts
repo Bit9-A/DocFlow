@@ -1,11 +1,25 @@
 import { PAGE_SIZES } from '@docflow/core/constants';
-import type { DocFlowSchema, DocBlock } from '@docflow/core';
+import type { DocFlowSchema, DocBlock, TableColumn } from '@docflow/core';
 
-function cleanText(text: string): string {
+// ============================================================
+// Text cleaning — replaces {{path.to.var}} with either
+// ${data.path?.to?.var} for plain blocks or
+// ${loopOverVar[idx]?.field} for table cell values.
+// ============================================================
+
+function cleanText(text: string, tableCtx?: { loopOver: string; itemVar: string }): string {
   if (text.includes('{{')) {
-    // Replace {{path.to.val}} with ${data.path?.to?.val ?? ''}
     const jsTemplate = text.replace(/\{\{([^}]+)\}\}/g, (_, path) => {
-      const parts = path.trim().split('.');
+      const trimmed = path.trim();
+      const parts = trimmed.split('.');
+
+      // Inside a table column: "item.field" → "items[rowIdx]?.field"
+      if (tableCtx && parts[0] === tableCtx.itemVar) {
+        const restPath = parts.slice(1).map((p: string) => `?.${p}`).join('');
+        return `\${${tableCtx.loopOver}[rowIdx]${restPath} ?? ''}`;
+      }
+
+      // Plain blocks: "variable" or "nested.path" → "data.variable" or "data.nested?.path"
       const safePath = parts.map((p: string, i: number) => i === 0 ? p : `?.${p}`).join('');
       return `\${data.${safePath} ?? ''}`;
     });
@@ -14,10 +28,16 @@ function cleanText(text: string): string {
   return JSON.stringify(text);
 }
 
+// ============================================================
+// Variable extraction — builds a mock data object from the AST
+// with table-aware array generation.
+// ============================================================
+
 function extractVariables(ast: DocBlock[]): Record<string, any> {
   const vars: Record<string, any> = {};
   const regex = /\{\{([^}]+)\}\}/g;
 
+  // Add a non-table variable path: "nested.field" → { nested: { field: "..." } }
   const addPath = (path: string) => {
     const segments = path.trim().split('.');
     let current = vars;
@@ -34,28 +54,117 @@ function extractVariables(ast: DocBlock[]): Record<string, any> {
     }
   };
 
-  const checkText = (text: string) => {
+  // Add a table variable path: table with loopOver="items" and
+  // column value "{{item.name}}" → { items: [{ name: "[name]" }] }
+  const addTablePath = (loopOver: string, itemVar: string, field: string) => {
+    // Ensure the loopOver array exists in vars
+    if (!vars[loopOver] || !Array.isArray(vars[loopOver])) {
+      vars[loopOver] = [{}];
+    }
+    const arr = vars[loopOver] as Record<string, any>[];
+    const firstItem = arr[0]!;
+    firstItem[field] = `[${field}]`;
+  };
+
+  // Scan all text in a block for {{variables}}
+  const checkText = (text: string, tableCtx?: { loopOver: string; itemVar: string }) => {
     let match;
     regex.lastIndex = 0;
     while ((match = regex.exec(text)) !== null) {
       if (match[1]) {
-        addPath(match[1]);
+        const trimmed = match[1].trim();
+        const parts = trimmed.split('.');
+        // Table-context variable: item.field → added to array
+        if (tableCtx && parts[0] === tableCtx.itemVar && parts.length > 1) {
+          addTablePath(tableCtx.loopOver, tableCtx.itemVar, parts.slice(1).join('.'));
+        } else {
+          addPath(trimmed);
+        }
       }
     }
   };
 
   for (const block of ast) {
-    if ('text' in block && block.text) checkText(block.text);
-    if ('columns' in block && Array.isArray(block.columns)) {
-      for (const col of block.columns) {
-        if ('value' in col && col.value) checkText(col.value);
-        if ('header' in col && col.header) checkText(col.header);
+    if (block.type === 'table') {
+      const table = block as Extract<DocBlock, { type: 'table' }>;
+      const loopOver = table.loopOver;
+
+      // The item variable is whatever comes before the first dot in column values
+      let itemVar = 'item';
+      for (const col of table.columns) {
+        if (col.value?.includes('{{')) {
+          const m = col.value.match(/\{\{([^.}]+)\./);
+          if (m && m[1]) {
+            itemVar = m[1];
+            break;
+          }
+        }
       }
+
+      const tableCtx = { loopOver, itemVar };
+
+      // Process column values with table context
+      for (const col of table.columns) {
+        if (col.value) checkText(col.value, tableCtx);
+        if (col.header) checkText(col.header);
+      }
+    } else {
+      // Non-table blocks: regular variable extraction
+      if ('text' in block && (block as any).text) checkText((block as any).text);
+      if ('src' in block && (block as any).src) checkText((block as any).src);
+      if ('alt' in block && (block as any).alt) checkText((block as any).alt);
     }
   }
 
   return vars;
 }
+
+// ============================================================
+// Build merged data object from customVariables + uploadedJson
+// + AST-extracted mock variables
+// ============================================================
+
+function buildExportData(
+  schema: DocFlowSchema,
+  astVariables: Record<string, any>,
+): Record<string, any> {
+  const data: Record<string, any> = {};
+
+  // 1. Custom variables first (flat key-value)
+  for (const v of schema.metadata.customVariables ?? []) {
+    data[v.key] = v.value;
+  }
+
+  // 2. Uploaded JSON payload (shallow merge)
+  const rawJson = schema.metadata.uploadedJson ?? '';
+  if (rawJson.trim()) {
+    try {
+      const parsed = JSON.parse(rawJson);
+      if (typeof parsed === 'object' && parsed !== null) {
+        for (const [key, val] of Object.entries(parsed)) {
+          if (!(key in data)) {
+            data[key] = val;
+          }
+        }
+      }
+    } catch {
+      // silently ignore invalid JSON
+    }
+  }
+
+  // 3. AST-extracted mock variables fill in any gaps
+  for (const [key, val] of Object.entries(astVariables)) {
+    if (!(key in data)) {
+      data[key] = val;
+    }
+  }
+
+  return data;
+}
+
+// ============================================================
+// Block-to-code renderer
+// ============================================================
 
 function renderBlockToCode(block: DocBlock, schema: DocFlowSchema, indent: string, yOffsetExpr?: string): string {
   let code = '';
@@ -99,6 +208,90 @@ function renderBlockToCode(block: DocBlock, schema: DocFlowSchema, indent: strin
         ? (yOffsetExpr ? `${yOffsetExpr} + ${block.y}` : block.y)
         : 10;
       code += `${indent}   .text(${textVal}, ${x}, ${y}, ${JSON.stringify(textOptions)});\n\n`;
+      break;
+    }
+
+    case 'table': {
+      const table = block as Extract<DocBlock, { type: 'table' }>;
+      const fontSize = table.styles.fontSize ?? 10;
+      const cellPadding = table.styles.cellPadding ?? 6;
+      const borderColor = table.styles.borderColor ?? '#E5E7EB';
+      const borderWidth = table.styles.borderWidth ?? 1;
+      const headerBg = table.styles.headerBg ?? '#F3F4F6';
+      const headerColor = table.styles.headerColor ?? '#111827';
+      const stripedRows = table.styles.stripedRows ?? false;
+      const stripedColor = table.styles.stripedColor ?? '#F3F4F6';
+      const marginBottom = table.styles.marginBottom ?? 12;
+
+      // Determine item variable from column values
+      let itemVar = 'item';
+      for (const col of table.columns) {
+        if (col.value?.includes('{{')) {
+          const m = col.value.match(/\{\{([^.}]+)\./);
+          if (m && m[1]) { itemVar = m[1]; break; }
+        }
+      }
+
+      const loopOver = table.loopOver;
+      const tableCtx = { loopOver, itemVar };
+
+      // Calculate column widths as percentages of page width
+      code += `${indent}const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;\n`;
+      code += `${indent}const tableStartX = doc.page.margins.left;\n`;
+      code += `${indent}const colWidths = [${table.columns.map((c) => `tableWidth * (${parseFloat(c.width)} / 100)`).join(', ')}];\n`;
+      code += `${indent}const cellPad = ${cellPadding};\n`;
+
+      // Draw header row
+      code += `\n${indent}// Table header row\n`;
+      code += `${indent}const tableHeaderStartY = doc.y;\n`;
+      code += `${indent}doc.fontSize(${fontSize}).font('Helvetica-Bold');\n`;
+      code += `${indent}let thX = tableStartX;\n`;
+      for (const col of table.columns) {
+        const headerText = JSON.stringify(col.header);
+        code += `${indent}doc.fillColor(${JSON.stringify(headerColor)});\n`;
+        code += `${indent}doc.rect(thX, doc.y, colWidths[${table.columns.indexOf(col)}], doc.currentLineHeight() + cellPad * 2).fill(${JSON.stringify(headerBg)});\n`;
+        code += `${indent}doc.fillColor(${JSON.stringify(headerColor)});\n`;
+        code += `${indent}doc.text(${headerText}, thX + cellPad, doc.y + cellPad, { width: colWidths[${table.columns.indexOf(col)}] - cellPad * 2, align: ${JSON.stringify(col.align ?? 'left')} });\n`;
+        code += `${indent}thX += colWidths[${table.columns.indexOf(col)}];\n`;
+      }
+      code += `${indent}doc.moveDown(0.5);\n`;
+      code += `${indent}const headerEndY = doc.y;\n\n`;
+
+      // Data rows
+      code += `${indent}// Table data rows (loop over ${loopOver})\n`;
+      code += `${indent}const ${loopOver}Data = data.${loopOver} ?? [];\n`;
+      code += `${indent}for (let rowIdx = 0; rowIdx < ${loopOver}Data.length; rowIdx++) {\n`;
+      code += `${indent}  const row = ${loopOver}Data[rowIdx];\n`;
+      code += `${indent}  const isOdd = rowIdx % 2 === 1;\n`;
+      code += `${indent}  let rowX = tableStartX;\n`;
+      code += `${indent}  const rowY = doc.y;\n`;
+      code += `${indent}  doc.fontSize(${fontSize}).font('Helvetica');\n`;
+
+      if (stripedRows) {
+        code += `${indent}  if (isOdd) {\n`;
+        code += `${indent}    doc.rect(tableStartX, rowY, tableWidth, doc.currentLineHeight() + cellPad * 2).fill(${JSON.stringify(stripedColor)});\n`;
+        code += `${indent}  }\n`;
+      }
+
+      for (const col of table.columns) {
+        const cellValue = cleanText(col.value, tableCtx);
+        code += `${indent}  doc.fillColor('#374151');\n`;
+        code += `${indent}  doc.text(${cellValue}, rowX + cellPad, rowY + cellPad, { width: colWidths[${table.columns.indexOf(col)}] - cellPad * 2 });\n`;
+        code += `${indent}  rowX += colWidths[${table.columns.indexOf(col)}];\n`;
+      }
+
+      code += `${indent}  doc.moveDown(0.5);\n`;
+      code += `${indent}}\n\n`;
+
+      // Table border
+      code += `${indent}// Table outer border\n`;
+      code += `${indent}doc\n`;
+      code += `${indent}  .rect(tableStartX, tableHeaderStartY, tableWidth, doc.y - tableHeaderStartY)\n`;
+      code += `${indent}  .strokeColor(${JSON.stringify(borderColor)})\n`;
+      code += `${indent}  .lineWidth(${borderWidth})\n`;
+      code += `${indent}  .stroke();\n\n`;
+
+      code += `${indent}doc.moveDown(${marginBottom / 12});\n\n`;
       break;
     }
 
@@ -149,8 +342,13 @@ function renderBlockToCode(block: DocBlock, schema: DocFlowSchema, indent: strin
   return code;
 }
 
+// ============================================================
+// Main export function
+// ============================================================
+
 export function exportToPdfKit(schema: DocFlowSchema, lang: 'typescript' | 'javascript' = 'typescript'): string {
-  const variables = extractVariables(schema.ast);
+  const astVariables = extractVariables(schema.ast);
+  const mergedData = buildExportData(schema, astVariables);
 
   const headerBlock = schema.ast.find((b) => b.type === 'header');
   const footerBlock = schema.ast.find((b) => b.type === 'footer');
@@ -171,7 +369,7 @@ export function exportToPdfKit(schema: DocFlowSchema, lang: 'typescript' | 'java
     ? `import PDFDocument from 'pdfkit';\nimport * as fs from 'fs';`
     : `const PDFDocument = require('pdfkit');\nconst fs = require('fs');`;
 
-  const dataDecl = `// Mock payload data for interpolation\nconst data = ${JSON.stringify(variables, null, 2)};\n`;
+  const dataDecl = `// Payload data for interpolation\nconst data = ${JSON.stringify(mergedData, null, 2)};\n`;
 
   let code = `/**\n * Generated by DocFlow PDF Exporter\n */\n\n${imports}\n\n${dataDecl}\n`;
   code += `function generatePDF() {\n`;
