@@ -118,6 +118,27 @@ body {
   transition: transform var(--panel-transition);
   overflow-y: auto;
 }
+
+/* Full-width drawer on small phones */
+@media (max-width: 420px) {
+  .mobile-drawer {
+    width: 100%;
+    border-radius: 0;
+  }
+  .mobile-drawer.right {
+    border-left: none;
+  }
+  .mobile-drawer.left {
+    border-right: none;
+  }
+}
+
+/* Slightly wider drawer for tablet in landscape */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .mobile-drawer {
+    width: 320px;
+  }
+}
 .mobile-drawer.left {
   left: 0;
   border-left: none;

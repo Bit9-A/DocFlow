@@ -18,6 +18,10 @@ export default function EditorPage() {
   const toggleMobileToolbar = useUIStore((s) => s.toggleMobileToolbar);
   const toggleMobileInspector = useUIStore((s) => s.toggleMobileInspector);
   const closeAllMobile = useUIStore((s) => s.closeAllMobile);
+  const isToolbarOpen = useUIStore((s) => s.isToolbarOpen);
+  const isInspectorOpen = useUIStore((s) => s.isInspectorOpen);
+  const setToolbarOpen = useUIStore((s) => s.setToolbarOpen);
+  const setInspectorOpen = useUIStore((s) => s.setInspectorOpen);
 
   // Responsive breakpoint detection
   useEffect(() => {
@@ -75,6 +79,17 @@ export default function EditorPage() {
         e.preventDefault();
         handleRedo();
       }
+      // Toggle left panel (Ctrl+B)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        setToolbarOpen(!useUIStore.getState().isToolbarOpen);
+      }
+      // Toggle right panel (Ctrl+I)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        setInspectorOpen(!useUIStore.getState().isInspectorOpen);
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const target = e.target as HTMLElement;
         if (
@@ -119,7 +134,7 @@ export default function EditorPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, setToolbarOpen, setInspectorOpen]);
 
   const isDesktop = breakpoint === 'desktop';
   const isTablet = breakpoint === 'tablet';
@@ -130,9 +145,9 @@ export default function EditorPage() {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* ================================================================ */}
-        {/* DESKTOP: Left toolbar (always visible) */}
+        {/* DESKTOP: Left toolbar (toggle with Ctrl+B) */}
         {/* ================================================================ */}
-        {isDesktop && (
+        {isDesktop && isToolbarOpen && (
           <BlockToolbar />
         )}
 
@@ -150,12 +165,12 @@ export default function EditorPage() {
 
             {/* Toolbar drawer (left) */}
             <div
-              className={`mobile-drawer left ${isMobileToolbarOpen ? '' : 'closed'}`}
+              className={`mobile-drawer left flex flex-col ${isMobileToolbarOpen ? '' : 'closed'}`}
               role="dialog"
               aria-modal="true"
               aria-label="Block types panel"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
                 <span className="text-xs font-semibold text-white/60 uppercase tracking-widest">
                   Blocks
                 </span>
@@ -167,17 +182,19 @@ export default function EditorPage() {
                   <X size={16} />
                 </button>
               </div>
-              <BlockToolbar onClose={closeAllMobile} />
+              <div className="flex-1 overflow-y-auto">
+                <BlockToolbar onClose={closeAllMobile} />
+              </div>
             </div>
 
             {/* Inspector drawer (right) */}
             <div
-              className={`mobile-drawer right ${isMobileInspectorOpen ? '' : 'closed'}`}
+              className={`mobile-drawer right flex flex-col ${isMobileInspectorOpen ? '' : 'closed'}`}
               role="dialog"
               aria-modal="true"
               aria-label="Style inspector panel"
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#111122]">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#111122] flex-shrink-0">
                 <span className="text-xs font-semibold text-white/60 uppercase tracking-widest">
                   Properties
                 </span>
@@ -189,7 +206,9 @@ export default function EditorPage() {
                   <X size={16} />
                 </button>
               </div>
-              <StyleInspector />
+              <div className="flex-1 overflow-y-auto">
+                <StyleInspector />
+              </div>
             </div>
 
             {/* Tablet: floating action buttons */}
@@ -199,7 +218,7 @@ export default function EditorPage() {
                   onClick={toggleMobileToolbar}
                   className="fab-toolbar"
                   aria-label={isMobileToolbarOpen ? 'Close block toolbar' : 'Open block toolbar'}
-                  style={{ right: isMobileInspectorOpen ? 'calc(280px + 32px)' : '24px', bottom: '24px' }}
+                  style={{ right: isMobileInspectorOpen ? 'calc(320px + 32px)' : '24px', bottom: '24px' }}
                 >
                   {isMobileToolbarOpen ? <X size={24} /> : <Plus size={24} />}
                 </button>
@@ -222,9 +241,9 @@ export default function EditorPage() {
         <Canvas />
 
         {/* ================================================================ */}
-        {/* DESKTOP: Right inspector (always visible) */}
+        {/* DESKTOP: Right inspector (toggle with Ctrl+I) */}
         {/* ================================================================ */}
-        {isDesktop && (
+        {isDesktop && isInspectorOpen && (
           <StyleInspector />
         )}
       </div>

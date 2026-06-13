@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Download, Loader2, AlertCircle, Eye, FileWarning } from 'lucide-react';
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { useUIStore } from '@/store/useUIStore';
-import type { DocFlowSchema } from '@docflow/core';
 
 export function PDFPreview() {
   const isPreviewOpen = useUIStore((s) => s.isPreviewOpen);
@@ -16,16 +15,17 @@ export function PDFPreview() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const handleClose = useCallback(() => {
     setPreviewOpen(false);
-    // Revoke blob URL after closing
     if (pdfUrl) {
       URL.revokeObjectURL(pdfUrl);
       setPdfUrl(null);
     }
     setError(null);
     setPageCount(null);
+    setLoadFailed(false);
   }, [setPreviewOpen, pdfUrl]);
 
   // Generate PDF when modal opens
@@ -36,6 +36,7 @@ export function PDFPreview() {
     setLoading(true);
     setError(null);
     setPdfUrl(null);
+    setLoadFailed(false);
 
     async function generate() {
       try {
@@ -43,10 +44,7 @@ export function PDFPreview() {
         const response = await fetch('/api/render-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            schema,
-            data: {},
-          }),
+          body: JSON.stringify({ schema, data: {} }),
         });
 
         if (!response.ok) {
@@ -70,10 +68,7 @@ export function PDFPreview() {
     }
 
     generate();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [isPreviewOpen, exportSchema]);
 
   // Close on Escape
@@ -90,24 +85,24 @@ export function PDFPreview() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col p-0 sm:p-2"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
       role="dialog"
       aria-modal="true"
       aria-label="PDF Preview"
     >
-      <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl w-full max-w-5xl overflow-hidden flex flex-col shadow-2xl max-h-[95vh]">
+      <div className="bg-[#1a1a2e] sm:border border-white/10 sm:rounded-2xl w-full h-full flex flex-col shadow-2xl overflow-hidden">
         {/* --- Header --- */}
-        <div className="px-4 sm:px-6 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+        <div className="px-3 sm:px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
-              <Eye size={16} className="text-indigo-400" />
+            <div className="w-7 h-7 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
+              <Eye size={14} className="text-indigo-400" />
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-white truncate">
                 PDF Preview
               </h2>
-              <p className="text-[10px] text-white/40 truncate">
+              <p className="text-[10px] text-white/40 truncate hidden sm:block">
                 {metadata.title}{pageCount !== null ? ` — ${pageCount} page${pageCount !== 1 ? 's' : ''}` : ''}
               </p>
             </div>
@@ -130,6 +125,7 @@ export function PDFPreview() {
                 <span className="hidden sm:inline">Download</span>
               </a>
             )}
+            <div className="w-px h-5 bg-white/10 hidden sm:block" />
             <button
               onClick={handleClose}
               className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/10 transition-all"
@@ -141,37 +137,60 @@ export function PDFPreview() {
         </div>
 
         {/* --- Body --- */}
-        <div className="flex-1 overflow-hidden bg-[#0d0d1f] relative min-h-[300px] sm:min-h-[500px]">
+        <div className="flex-1 bg-[#0d0d1f] relative min-h-0 overflow-hidden">
           {loading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20">
               <Loader2 size={32} className="text-indigo-400 animate-spin" />
               <p className="text-xs text-white/50 font-medium">Rendering PDF...</p>
             </div>
           )}
 
           {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 p-6">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20 p-6">
               <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
                 <AlertCircle size={24} className="text-red-400" />
               </div>
               <p className="text-sm text-red-400 font-semibold text-center">Render Error</p>
               <p className="text-xs text-white/50 text-center max-w-md">{error}</p>
-              <button
-                onClick={() => setPreviewOpen(false)}
-                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-semibold transition-all mt-2"
-              >
-                Close
-              </button>
             </div>
           )}
 
           {pdfUrl && !loading && (
-            <iframe
-              src={pdfUrl}
-              className="w-full h-full border-0"
-              title="PDF Preview"
-              aria-label="PDF document preview"
-            />
+            <div className="w-full h-full overflow-auto bg-white/5">
+              <object
+                data={pdfUrl}
+                type="application/pdf"
+                className="w-full h-full border-0"
+                title="PDF Preview"
+                aria-label="PDF document preview"
+                onError={() => setLoadFailed(true)}
+              >
+                <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
+                  <FileWarning size={32} className="text-white/30" />
+                  <p className="text-sm text-white/60 text-center">
+                    PDF preview not available in your browser.
+                  </p>
+                  {pdfUrl && (
+                    <a
+                      href={pdfUrl}
+                      download
+                      className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all"
+                    >
+                      Download PDF to view
+                    </a>
+                  )}
+                </div>
+              </object>
+            </div>
+          )}
+
+          {loadFailed && pdfUrl && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <FileWarning size={24} className="text-white/30" />
+                <p className="text-xs text-white/50">PDF object failed to load</p>
+              </div>
+            </div>
           )}
 
           {!pdfUrl && !loading && !error && (
@@ -182,9 +201,9 @@ export function PDFPreview() {
         </div>
 
         {/* --- Footer --- */}
-        <div className="px-4 sm:px-6 py-3 border-t border-white/10 bg-black/10 flex items-center justify-between flex-shrink-0">
+        <div className="px-4 sm:px-5 py-2.5 border-t border-white/10 bg-black/10 flex items-center justify-between flex-shrink-0">
           <span className="text-[10px] text-white/30">
-            Rendered via <code className="text-indigo-400/60 font-mono">pdfkit</code>
+            <code className="text-indigo-400/60 font-mono">pdfkit</code>
           </span>
           {pageCount !== null && (
             <span className="text-[10px] text-white/40 font-mono">

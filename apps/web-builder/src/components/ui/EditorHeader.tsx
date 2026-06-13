@@ -12,6 +12,8 @@ import {
   Check,
   X,
   PanelRightOpen,
+  PanelLeftOpen,
+  PanelLeftClose,
   Plus,
   Eye,
 } from 'lucide-react';
@@ -33,6 +35,10 @@ export function EditorHeader() {
   const isMobileInspectorOpen = useUIStore((s) => s.isMobileInspectorOpen);
   const closeAllMobile = useUIStore((s) => s.closeAllMobile);
   const setPreviewOpen = useUIStore((s) => s.setPreviewOpen);
+  const isToolbarOpen = useUIStore((s) => s.isToolbarOpen);
+  const isInspectorOpen = useUIStore((s) => s.isInspectorOpen);
+  const setToolbarOpen = useUIStore((s) => s.setToolbarOpen);
+  const setInspectorOpen = useUIStore((s) => s.setInspectorOpen);
 
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [codeLang, setCodeLang] = useState<'typescript' | 'javascript'>('typescript');
@@ -200,6 +206,36 @@ export function EditorHeader() {
         >
           <Redo2 size={15} />
         </button>
+
+        {/* Panel toggles */}
+        <div className="flex items-center gap-1 mr-2">
+          <button
+            onClick={() => setToolbarOpen(!isToolbarOpen)}
+            className={`
+              p-1.5 rounded transition-all flex items-center justify-center
+              ${isToolbarOpen
+                ? 'bg-indigo-600/20 text-indigo-400'
+                : 'text-white/40 hover:text-white hover:bg-white/10'}
+            `}
+            title={isToolbarOpen ? 'Hide block toolbar (Ctrl+B)' : 'Show block toolbar (Ctrl+B)'}
+            aria-label={isToolbarOpen ? 'Hide block toolbar' : 'Show block toolbar'}
+          >
+            {isToolbarOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+          </button>
+          <button
+            onClick={() => setInspectorOpen(!isInspectorOpen)}
+            className={`
+              p-1.5 rounded transition-all flex items-center justify-center
+              ${isInspectorOpen
+                ? 'bg-indigo-600/20 text-indigo-400'
+                : 'text-white/40 hover:text-white hover:bg-white/10'}
+            `}
+            title={isInspectorOpen ? 'Hide inspector (Ctrl+I)' : 'Show inspector (Ctrl+I)'}
+            aria-label={isInspectorOpen ? 'Hide inspector' : 'Show inspector'}
+          >
+            <PanelRightOpen size={15} />
+          </button>
+        </div>
 
         <div className="w-px h-4 bg-white/10 mx-1" />
 

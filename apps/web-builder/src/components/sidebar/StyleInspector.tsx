@@ -20,6 +20,7 @@ import {
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { Database, FileUp, Globe } from 'lucide-react';
 import { AutocompleteInput, AutocompleteTextarea, flattenJsonKeys } from '../ui/Autocomplete';
+import { useUIStore } from '@/store/useUIStore';
 
 // ============================================================
 // Main Inspector component
@@ -34,6 +35,10 @@ export function StyleInspector() {
   const selectBlock = useDocumentStore((s) => s.selectBlock);
   const metadata = useDocumentStore((s) => s.metadata);
   const updateMetadata = useDocumentStore((s) => s.updateMetadata);
+
+  const breakpoint = useUIStore((s) => s.breakpoint);
+  const isMobile = breakpoint === 'mobile';
+  const isTablet = breakpoint === 'tablet';
 
   const [activeSettingsTab, setActiveSettingsTab] = useState<'page' | 'project' | 'variables'>('page');
 
@@ -61,13 +66,14 @@ export function StyleInspector() {
   if (block === null) {
     return (
       <aside
-        className="w-full lg:w-64 bg-[#111122] lg:border-l border-white/10 flex flex-col h-full overflow-hidden"
+        className="w-full lg:w-64 bg-[#111122] lg:border-l border-white/10 flex flex-col h-full"
         aria-label="Style inspector — page settings"
       >
         <SidebarTabs
           activeTab={activeSettingsTab}
           setActiveTab={setActiveSettingsTab}
         />
+        <div className="flex-1 overflow-y-auto">
           {activeSettingsTab === 'page' ? (
             <PageSettingsPanel
               metadata={metadata}
@@ -76,18 +82,23 @@ export function StyleInspector() {
               addBlock={addBlock}
               removeBlock={removeBlock}
               selectBlock={selectBlock}
+              isMobile={isMobile}
+              isTablet={isTablet}
             />
           ) : activeSettingsTab === 'project' ? (
             <ProjectSettingsPanel
               metadata={metadata}
               updateMetadata={updateMetadata}
+              isMobile={isMobile}
             />
           ) : (
             <VariablesSettingsPanel
               metadata={metadata}
               updateMetadata={updateMetadata}
+              isMobile={isMobile}
             />
           )}
+        </div>
       </aside>
     );
   }
@@ -99,12 +110,12 @@ export function StyleInspector() {
 
   return (
     <aside
-      className="w-full lg:w-64 bg-[#111122] lg:border-l border-white/10 flex flex-col h-full overflow-y-auto"
+      className="w-full lg:w-64 bg-[#111122] lg:border-l border-white/10 flex flex-col h-full"
       aria-label="Style inspector"
     >
       <InspectorHeader label={`${block.type} properties`} />
 
-      <div className="p-3 space-y-5">
+      <div className={`flex-1 overflow-y-auto ${isMobile ? 'p-2 space-y-4' : 'p-3 space-y-5'}`}>
         {/* Block metadata */}
         <div>
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
@@ -122,6 +133,7 @@ export function StyleInspector() {
                 value={block.x ?? 0}
                 min={0}
                 max={1500}
+                isMobile={isMobile}
                 onChange={(v) => updateBlock(block.id, { x: v } as Partial<DocBlock>)}
               />
               <NumberInput
@@ -129,6 +141,7 @@ export function StyleInspector() {
                 value={block.y ?? 0}
                 min={0}
                 max={2500}
+                isMobile={isMobile}
                 onChange={(v) => updateBlock(block.id, { y: v } as Partial<DocBlock>)}
               />
               <NumberInput
@@ -136,6 +149,7 @@ export function StyleInspector() {
                 value={block.width ?? 0}
                 min={0}
                 max={1500}
+                isMobile={isMobile}
                 onChange={(v) => updateBlock(block.id, { width: v } as Partial<DocBlock>)}
               />
               <NumberInput
@@ -143,6 +157,7 @@ export function StyleInspector() {
                 value={block.height ?? 0}
                 min={0}
                 max={1500}
+                isMobile={isMobile}
                 onChange={(v) => updateBlock(block.id, { height: v } as Partial<DocBlock>)}
               />
               <div className="col-span-2 pt-2 border-t border-white/5">
@@ -196,6 +211,7 @@ export function StyleInspector() {
                   value={(block.styles as TextStyles).fontSize ?? 11}
                   min={6}
                   max={144}
+                  isMobile={isMobile}
                   onChange={(v) => updateStyles({ fontSize: v })}
                 />
                 <NumberInput
@@ -204,6 +220,7 @@ export function StyleInspector() {
                   min={0.5}
                   max={4}
                   step={0.1}
+                  isMobile={isMobile}
                   onChange={(v) => updateStyles({ lineHeight: v })}
                 />
               </div>
@@ -236,14 +253,14 @@ export function StyleInspector() {
                   type="color"
                   value={(block.styles as TextStyles).color ?? '#111827'}
                   onChange={(e) => updateStyles({ color: e.target.value })}
-                  className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent flex-shrink-0"
+                  className={`rounded cursor-pointer border-0 bg-transparent flex-shrink-0 ${isMobile ? 'w-10 h-10' : 'w-8 h-8'}`}
                   aria-label="Text color"
                 />
                 <input
                   type="text"
                   value={(block.styles as TextStyles).color ?? '#111827'}
                   onChange={(e) => updateStyles({ color: e.target.value })}
-                  className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                  className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
                   aria-label="Text color hex value"
                 />
               </div>
@@ -279,15 +296,15 @@ export function StyleInspector() {
 
         {/* Dynamic Context Panels */}
         {block.type === 'table' && (
-          <TablePropertiesPanel block={block} updateBlock={updateBlock} />
+          <TablePropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
         )}
 
         {block.type === 'columns' && (
-          <ColumnsPropertiesPanel block={block} updateBlock={updateBlock} />
+          <ColumnsPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
         )}
 
         {(block.type === 'header' || block.type === 'footer') && (
-          <HeaderFooterPropertiesPanel block={block} updateBlock={updateBlock} />
+          <HeaderFooterPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
         )}
 
         {/* Spacing */}
@@ -297,6 +314,7 @@ export function StyleInspector() {
             value={block.styles.marginTop ?? 0}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) => updateStyles({ marginTop: v })}
           />
           <NumberInput
@@ -304,6 +322,7 @@ export function StyleInspector() {
             value={block.styles.marginBottom ?? 0}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) => updateStyles({ marginBottom: v })}
           />
         </InspectorSection>
@@ -316,6 +335,7 @@ export function StyleInspector() {
               value={block.height}
               min={1}
               max={500}
+              isMobile={isMobile}
               onChange={(v) => updateBlock(block.id, { height: v } as Partial<DocBlock>)}
             />
           </InspectorSection>
@@ -327,29 +347,29 @@ export function StyleInspector() {
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] text-white/40 block mb-1">URL</label>
-                <input
-                  type="text"
-                  value={block.src}
-                  onChange={(e) =>
-                    updateBlock(block.id, { src: e.target.value } as Partial<DocBlock>)
-                  }
-                  placeholder="https://..."
-                  className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                  aria-label="Image source URL"
-                />
+                  <input
+                    type="text"
+                    value={block.src}
+                    onChange={(e) =>
+                      updateBlock(block.id, { src: e.target.value } as Partial<DocBlock>)
+                    }
+                    placeholder="https://..."
+                    className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+                    aria-label="Image source URL"
+                  />
               </div>
               <div>
                 <label className="text-[10px] text-white/40 block mb-1">Alt text</label>
-                <input
-                  type="text"
-                  value={block.alt}
-                  onChange={(e) =>
-                    updateBlock(block.id, { alt: e.target.value } as Partial<DocBlock>)
-                  }
-                  placeholder="Describe the image..."
-                  className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  aria-label="Image alt text"
-                />
+                  <input
+                    type="text"
+                    value={block.alt}
+                    onChange={(e) =>
+                      updateBlock(block.id, { alt: e.target.value } as Partial<DocBlock>)
+                    }
+                    placeholder="Describe the image..."
+                    className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+                    aria-label="Image alt text"
+                  />
               </div>
             </div>
           </InspectorSection>
@@ -370,6 +390,8 @@ interface PageSettingsPanelProps {
   addBlock: (type: any) => void;
   removeBlock: (id: string) => void;
   selectBlock: (id: string | null) => void;
+  isMobile: boolean;
+  isTablet: boolean;
 }
 
 function PageSettingsPanel({
@@ -379,19 +401,21 @@ function PageSettingsPanel({
   addBlock,
   removeBlock,
   selectBlock,
+  isMobile,
+  isTablet,
 }: PageSettingsPanelProps) {
   const headerBlock = ast.find((b) => b.type === 'header');
   const footerBlock = ast.find((b) => b.type === 'footer');
 
   return (
-    <div className="p-3 space-y-6">
+    <div className={`${isMobile ? 'p-2 space-y-4' : 'p-3 space-y-6'}`}>
       {/* Title */}
       <InspectorSection label="Document Title">
         <input
           type="text"
           value={metadata.title}
           onChange={(e) => updateMetadata({ title: e.target.value })}
-          className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+          className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
           aria-label="Document title"
         />
       </InspectorSection>
@@ -404,7 +428,7 @@ function PageSettingsPanel({
             <select
               value={metadata.pageSize}
               onChange={(e) => updateMetadata({ pageSize: e.target.value })}
-              className="w-full bg-[#1e1e38] text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              className={`w-full bg-[#1e1e38] text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
               aria-label="Page size"
             >
               <option value="LETTER">LETTER (Carta)</option>
@@ -418,7 +442,7 @@ function PageSettingsPanel({
             <select
               value={metadata.orientation}
               onChange={(e) => updateMetadata({ orientation: e.target.value })}
-              className="w-full bg-[#1e1e38] text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              className={`w-full bg-[#1e1e38] text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
               aria-label="Orientation"
             >
               <option value="portrait">Portrait (Vertical)</option>
@@ -430,12 +454,13 @@ function PageSettingsPanel({
 
       {/* Margins */}
       <InspectorSection label="Page Margins (pt)">
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-2'} gap-2`}>
           <NumberInput
             label="Top"
             value={metadata.margins.top}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) =>
               updateMetadata({ margins: { ...metadata.margins, top: v } })
             }
@@ -445,6 +470,7 @@ function PageSettingsPanel({
             value={metadata.margins.bottom}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) =>
               updateMetadata({ margins: { ...metadata.margins, bottom: v } })
             }
@@ -454,6 +480,7 @@ function PageSettingsPanel({
             value={metadata.margins.left}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) =>
               updateMetadata({ margins: { ...metadata.margins, left: v } })
             }
@@ -463,6 +490,7 @@ function PageSettingsPanel({
             value={metadata.margins.right}
             min={0}
             max={200}
+            isMobile={isMobile}
             onChange={(v) =>
               updateMetadata({ margins: { ...metadata.margins, right: v } })
             }
@@ -564,9 +592,10 @@ function PageSettingsPanel({
 interface TablePropertiesPanelProps {
   block: Extract<DocBlock, { type: 'table' }>;
   updateBlock: (id: string, changes: Partial<DocBlock>) => void;
+  isMobile: boolean;
 }
 
-function TablePropertiesPanel({ block, updateBlock }: TablePropertiesPanelProps) {
+function TablePropertiesPanel({ block, updateBlock, isMobile }: TablePropertiesPanelProps) {
   const [newColHeader, setNewColHeader] = useState('');
   const [newColValue, setNewColValue] = useState('');
 
@@ -608,7 +637,7 @@ function TablePropertiesPanel({ block, updateBlock }: TablePropertiesPanelProps)
             type="text"
             value={block.loopOver}
             onValueChange={(val) => updateBlock(block.id, { loopOver: val })}
-            className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+            className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
             placeholder="factura.items"
             aria-label="Table loop array path"
           />
@@ -617,12 +646,13 @@ function TablePropertiesPanel({ block, updateBlock }: TablePropertiesPanelProps)
 
       <InspectorSection label="Table Styles">
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
             <NumberInput
               label="Font Size (pt)"
               value={block.styles.fontSize ?? 10}
               min={6}
               max={30}
+              isMobile={isMobile}
               onChange={(v) => updateTableStyles({ fontSize: v })}
             />
             <NumberInput
@@ -630,17 +660,19 @@ function TablePropertiesPanel({ block, updateBlock }: TablePropertiesPanelProps)
               value={block.styles.cellPadding ?? 6}
               min={0}
               max={30}
+              isMobile={isMobile}
               onChange={(v) => updateTableStyles({ cellPadding: v })}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
             <NumberInput
               label="Border (pt)"
               value={block.styles.borderWidth ?? 0.5}
               min={0}
               max={10}
               step={0.5}
+              isMobile={isMobile}
               onChange={(v) => updateTableStyles({ borderWidth: v })}
             />
             <div className="flex flex-col justify-end">
@@ -801,9 +833,10 @@ function TablePropertiesPanel({ block, updateBlock }: TablePropertiesPanelProps)
 interface ColumnsPropertiesPanelProps {
   block: Extract<DocBlock, { type: 'columns' }>;
   updateBlock: (id: string, changes: Partial<DocBlock>) => void;
+  isMobile: boolean;
 }
 
-function ColumnsPropertiesPanel({ block, updateBlock }: ColumnsPropertiesPanelProps) {
+function ColumnsPropertiesPanel({ block, updateBlock, isMobile }: ColumnsPropertiesPanelProps) {
   function handleWidthChange(idx: number, widthStr: string) {
     const updatedCols = block.columns.map((col, i) =>
       i === idx ? { ...col, width: widthStr } : col,
@@ -823,6 +856,7 @@ function ColumnsPropertiesPanel({ block, updateBlock }: ColumnsPropertiesPanelPr
           value={(block.styles as any).gap ?? 10}
           min={0}
           max={100}
+          isMobile={isMobile}
           onChange={handleGapChange}
         />
       </InspectorSection>
@@ -854,9 +888,10 @@ function ColumnsPropertiesPanel({ block, updateBlock }: ColumnsPropertiesPanelPr
 interface HeaderFooterPropertiesPanelProps {
   block: Extract<DocBlock, { type: 'header' | 'footer' }>;
   updateBlock: (id: string, changes: Partial<DocBlock>) => void;
+  isMobile: boolean;
 }
 
-function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropertiesPanelProps) {
+function HeaderFooterPropertiesPanel({ block, updateBlock, isMobile }: HeaderFooterPropertiesPanelProps) {
   const metadata = useDocumentStore((s) => s.metadata);
   const [newSubText, setNewSubText] = useState('');
   const [newSubAlign, setNewSubAlign] = useState<'left' | 'center' | 'right'>('center');
@@ -924,7 +959,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 type="color"
                 value={block.styles?.backgroundColor ?? '#ffffff'}
                 onChange={(e) => updateStyles({ backgroundColor: e.target.value })}
-                className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent flex-shrink-0"
+                className={`rounded cursor-pointer border-0 bg-transparent flex-shrink-0 ${isMobile ? 'w-10 h-10' : 'w-8 h-8'}`}
                 aria-label="Background color picker"
               />
               <input
@@ -932,7 +967,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 value={block.styles?.backgroundColor ?? ''}
                 onChange={(e) => updateStyles({ backgroundColor: e.target.value })}
                 placeholder="#FFFFFF or transparent"
-                className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center text-white"
+                className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
                 aria-label="Background color hex value"
               />
             </div>
@@ -944,7 +979,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 type="color"
                 value={block.styles?.color ?? '#111827'}
                 onChange={(e) => updateStyles({ color: e.target.value })}
-                className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent flex-shrink-0"
+                className={`rounded cursor-pointer border-0 bg-transparent flex-shrink-0 ${isMobile ? 'w-10 h-10' : 'w-8 h-8'}`}
                 aria-label="Text color picker"
               />
               <input
@@ -952,7 +987,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 value={block.styles?.color ?? ''}
                 onChange={(e) => updateStyles({ color: e.target.value })}
                 placeholder="#111827"
-                className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center text-white"
+                className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
                 aria-label="Text color hex value"
               />
             </div>
@@ -964,7 +999,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 type="color"
                 value={block.styles?.borderColor ?? '#e5e7eb'}
                 onChange={(e) => updateStyles({ borderColor: e.target.value })}
-                className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent flex-shrink-0"
+                className={`rounded cursor-pointer border-0 bg-transparent flex-shrink-0 ${isMobile ? 'w-10 h-10' : 'w-8 h-8'}`}
                 aria-label="Border color picker"
               />
               <input
@@ -972,7 +1007,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 value={block.styles?.borderColor ?? ''}
                 onChange={(e) => updateStyles({ borderColor: e.target.value })}
                 placeholder="#E5E7EB"
-                className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center text-white"
+                className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
                 aria-label="Border color hex value"
               />
             </div>
@@ -1016,7 +1051,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                   <AutocompleteTextarea
                     value={(sub as any).text ?? ''}
                     onValueChange={(val) => handleSubBlockChange(idx, val)}
-                    className="w-full bg-[#0d0d1e] text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[50px]"
+                    className={`w-full bg-[#0d0d1e] text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[50px] ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
                     placeholder="Text template..."
                   />
                 )}
@@ -1033,7 +1068,7 @@ function HeaderFooterPropertiesPanel({ block, updateBlock }: HeaderFooterPropert
                 placeholder="Text (e.g. Page {{currentPage}} of {{totalPages}})"
                 value={newSubText}
                 onValueChange={(val) => setNewSubText(val)}
-                className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none"
+                className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
               />
               <div className="flex gap-2">
                 <select
@@ -1117,13 +1152,14 @@ interface NumberInputProps {
   min?: number;
   max?: number;
   step?: number;
+  isMobile?: boolean;
   onChange: (value: number) => void;
 }
 
-function NumberInput({ label, value, min, max, step = 1, onChange }: NumberInputProps) {
+function NumberInput({ label, value, min, max, step = 1, isMobile, onChange }: NumberInputProps) {
   return (
     <div>
-      <label className="text-[10px] text-white/40 block mb-1">{label}</label>
+      <label className={`${isMobile ? 'text-[11px]' : 'text-[10px]'} text-white/40 block mb-1`}>{label}</label>
       <input
         type="number"
         value={value}
@@ -1131,11 +1167,12 @@ function NumberInput({ label, value, min, max, step = 1, onChange }: NumberInput
         max={max}
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="
-          w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded
+        className={`
+          w-full bg-white/5 text-white/70 rounded
           border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500
           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
-        "
+          ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}
+        `}
         aria-label={label}
       />
     </div>
@@ -1257,9 +1294,11 @@ function getContrastRatio(hex: string): number {
 function ProjectSettingsPanel({
   metadata,
   updateMetadata,
+  isMobile,
 }: {
   metadata: any;
   updateMetadata: (changes: any) => void;
+  isMobile: boolean;
 }) {
   const [keywordInput, setKeywordInput] = useState('');
 
@@ -1279,14 +1318,14 @@ function ProjectSettingsPanel({
   }
 
   return (
-    <div className="p-3 space-y-6">
+    <div className={`${isMobile ? 'p-2 space-y-4' : 'p-3 space-y-6'}`}>
       {/* Title */}
       <InspectorSection label="Project Title">
         <input
           type="text"
           value={metadata.title ?? ''}
           onChange={(e) => updateMetadata({ title: e.target.value })}
-          className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+          className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
           aria-label="Project Title"
         />
       </InspectorSection>
@@ -1297,7 +1336,7 @@ function ProjectSettingsPanel({
           type="text"
           value={metadata.author ?? ''}
           onChange={(e) => updateMetadata({ author: e.target.value })}
-          className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
           placeholder="e.g. John Doe"
           aria-label="Document Author"
         />
@@ -1308,7 +1347,7 @@ function ProjectSettingsPanel({
         <textarea
           value={metadata.subject ?? ''}
           onChange={(e) => updateMetadata({ subject: e.target.value })}
-          className="w-full bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[60px]"
+          className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'} min-h-[60px]`}
           placeholder="Brief summary..."
           aria-label="Document Subject"
         />
@@ -1322,7 +1361,7 @@ function ProjectSettingsPanel({
               type="text"
               value={keywordInput}
               onChange={(e) => setKeywordInput(e.target.value)}
-              className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none"
+              className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
               placeholder="Add tag..."
             />
             <button
@@ -1356,9 +1395,11 @@ function ProjectSettingsPanel({
 function VariablesSettingsPanel({
   metadata,
   updateMetadata,
+  isMobile,
 }: {
   metadata: any;
   updateMetadata: (changes: any) => void;
+  isMobile: boolean;
 }) {
   const [customKey, setCustomKey] = useState('');
   const [customValue, setCustomValue] = useState('');
@@ -1445,7 +1486,7 @@ function VariablesSettingsPanel({
   }
 
   return (
-    <div className="p-3 space-y-6">
+    <div className={`${isMobile ? 'p-2 space-y-4' : 'p-3 space-y-6'}`}>
       <InspectorSection label="Custom Variables">
         <div className="space-y-3">
           <div className="flex gap-1">
@@ -1454,20 +1495,20 @@ function VariablesSettingsPanel({
               placeholder="Key"
               value={customKey}
               onChange={(e) => setCustomKey(e.target.value)}
-              className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
             />
             <input
               type="text"
               placeholder="Value"
               value={customValue}
               onChange={(e) => setCustomValue(e.target.value)}
-              className="flex-1 bg-white/5 text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
             />
             <button
               onClick={handleAddCustomVar}
-              className="py-1 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold"
+              className={`py-1 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-semibold ${isMobile ? 'px-3 py-2.5 text-sm' : 'text-xs'}`}
             >
-              <Plus size={14} />
+              <Plus size={isMobile ? 18 : 14} />
             </button>
           </div>
           <div className="space-y-1 max-h-36 overflow-y-auto scrollbar-thin">
@@ -1524,7 +1565,7 @@ function VariablesSettingsPanel({
             <textarea
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
-              className="w-full bg-[#0d0d1e] text-white/70 text-xs px-2 py-1.5 rounded border border-white/10 focus:outline-none min-h-[100px] font-mono"
+              className={`w-full bg-[#0d0d1e] text-white/70 rounded border border-white/10 focus:outline-none min-h-[100px] font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
               placeholder='{ "key": "value" }'
             />
             {jsonError && (
