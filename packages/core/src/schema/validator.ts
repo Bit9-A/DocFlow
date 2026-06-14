@@ -116,6 +116,7 @@ const tableBlockSchema = z.object({
   loopOver: z.string().min(1),
   columns: z.array(tableColumnSchema).min(1),
   styles: tableStylesSchema,
+  limit: z.number().min(0).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
   width: z.number().min(0).optional(),
@@ -179,6 +180,127 @@ const pageBreakBlockSchema = z.object({
   isLocked: z.boolean().optional(),
 });
 
+const pageNumberBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('page-number'),
+  format: z.string(),
+  styles: textStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
+const signatureStylesSchema = baseStylesSchema.extend({
+  lineWidth: z.number().min(0).optional(),
+  lineColor: hexColorSchema.optional(),
+  gap: z.number().min(0).optional(),
+  fontSize: z.number().min(6).max(144).optional(),
+  color: hexColorSchema.optional(),
+});
+
+const signatureBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('signature'),
+  label: z.string(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  styles: signatureStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
+const containerStylesSchema = baseStylesSchema.extend({
+  padding: z.number().min(0).optional(),
+  borderRadius: z.number().min(0).optional(),
+});
+
+const containerBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('container'),
+  blocks: z.array(z.lazy(() => docBlockSchema)),
+  styles: containerStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
+const barcodeStylesSchema = baseStylesSchema.extend({
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  color: hexColorSchema.optional(),
+});
+
+const barcodeBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('barcode'),
+  format: z.enum(['qr', 'code128', 'ean13']),
+  value: z.string().min(1),
+  styles: barcodeStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
+const listStylesSchema = textStylesSchema.extend({
+  bulletStyle: z.enum(['dot', 'number', 'dash', 'checkmark']).optional(),
+  itemSpacing: z.number().min(0).optional(),
+});
+
+const listBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('list'),
+  ordered: z.boolean(),
+  items: z.array(z.string()),
+  styles: listStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
+const chartStylesSchema = baseStylesSchema.extend({
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  colors: z.array(hexColorSchema).optional(),
+});
+
+const chartBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('chart'),
+  chartType: z.enum(['bar', 'pie', 'line']),
+  loopOver: z.string().min(1),
+  labelKey: z.string().min(1),
+  valueKey: z.string().min(1),
+  styles: chartStylesSchema,
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().min(0).optional(),
+  height: z.number().min(0).optional(),
+  page: z.number().min(0).optional(),
+  ignoreMargins: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
+});
+
 // Forward declaration for nested blocks (columns, header, footer)
 // We use z.lazy to handle the recursive reference
 const docBlockSchema: z.ZodType = z.lazy(() =>
@@ -190,6 +312,12 @@ const docBlockSchema: z.ZodType = z.lazy(() =>
     dividerBlockSchema,
     spacerBlockSchema,
     pageBreakBlockSchema,
+    pageNumberBlockSchema,
+    signatureBlockSchema,
+    containerBlockSchema,
+    barcodeBlockSchema,
+    listBlockSchema,
+    chartBlockSchema,
     columnsBlockSchema,
     headerBlockSchema,
     footerBlockSchema,

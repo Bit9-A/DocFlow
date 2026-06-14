@@ -8,7 +8,7 @@ import {
 } from '../registry.js';
 import { resolvePayload } from '../../../parser/interpolate.js';
 
-function estimateRowHeight(
+export function estimateRowHeight(
   doc: any,
   rowData: Record<string, unknown> | null,
   columns: any[],
@@ -208,10 +208,13 @@ function renderTable(block: TableBlock, ctx: PdfRenderContext): void {
   // Use actual data rows if available, otherwise render a single preview row
   let dataRows: Record<string, unknown>[] = [{}]; // default: single preview row
   if (Array.isArray(items) && items.length > 0) {
-    const filtered = (items as Record<string, unknown>[]).filter(
+    let filtered = (items as Record<string, unknown>[]).filter(
       (item): item is Record<string, unknown> =>
         typeof item === 'object' && item !== null,
     );
+    if (block.limit && block.limit > 0) {
+      filtered = filtered.slice(0, block.limit);
+    }
     if (filtered.length > 0) {
       dataRows = filtered;
     }

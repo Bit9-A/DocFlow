@@ -102,6 +102,7 @@ export interface TableBlock extends BaseBlock {
   loopOver: string;
   columns: TableColumn[];
   styles: TableStyles;
+  limit?: number;
 }
 
 export interface ImageBlock extends BaseBlock {
@@ -149,6 +150,81 @@ export interface FooterBlock extends BaseBlock {
   styles: BaseStyles;
 }
 
+// -- 6 Professional Blocks
+
+export interface PageNumberBlock extends BaseBlock {
+  type: 'page-number';
+  format: string; // e.g. "Página {current} de {total}"
+  styles: TextStyles;
+}
+
+export interface SignatureStyles extends BaseStyles {
+  lineWidth?: number;
+  lineColor?: string;
+  gap?: number;
+  fontSize?: number;
+  color?: string;
+}
+
+export interface SignatureBlock extends BaseBlock {
+  type: 'signature';
+  label: string;
+  name?: string;
+  title?: string;
+  styles: SignatureStyles;
+}
+
+export interface ContainerStyles extends BaseStyles {
+  padding?: number;
+  borderRadius?: number;
+}
+
+export interface ContainerBlock extends BaseBlock {
+  type: 'container';
+  blocks: DocBlock[];
+  styles: ContainerStyles;
+}
+
+export interface BarcodeStyles extends BaseStyles {
+  width?: number;
+  height?: number;
+  color?: string;
+}
+
+export interface BarcodeBlock extends BaseBlock {
+  type: 'barcode';
+  format: 'qr' | 'code128' | 'ean13';
+  value: string;
+  styles: BarcodeStyles;
+}
+
+export interface ListStyles extends TextStyles {
+  bulletStyle?: 'dot' | 'number' | 'dash' | 'checkmark';
+  itemSpacing?: number;
+}
+
+export interface ListBlock extends BaseBlock {
+  type: 'list';
+  ordered: boolean;
+  items: string[];
+  styles: ListStyles;
+}
+
+export interface ChartStyles extends BaseStyles {
+  width?: number;
+  height?: number;
+  colors?: string[];
+}
+
+export interface ChartBlock extends BaseBlock {
+  type: 'chart';
+  chartType: 'bar' | 'pie' | 'line';
+  loopOver: string;
+  labelKey: string;
+  valueKey: string;
+  styles: ChartStyles;
+}
+
 // -- The discriminated union
 export type DocBlock =
   | HeadingBlock
@@ -160,7 +236,13 @@ export type DocBlock =
   | ColumnsBlock
   | PageBreakBlock
   | HeaderBlock
-  | FooterBlock;
+  | FooterBlock
+  | PageNumberBlock
+  | SignatureBlock
+  | ContainerBlock
+  | BarcodeBlock
+  | ListBlock
+  | ChartBlock;
 
 // Convenience type for block type string literals
 export type DocBlockType = DocBlock['type'];

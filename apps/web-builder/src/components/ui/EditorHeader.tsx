@@ -109,6 +109,7 @@ export function EditorHeader() {
 
   return (
     <header className="h-12 bg-[#0d0d1f] border-b border-white/10 flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0 no-print">
+      <h1 className="sr-only">DocFlow PDF Document Builder & Editor</h1>
       {/* Logo */}
       <div className="flex items-center gap-1.5 md:gap-2 mr-1 md:mr-2 flex-shrink-0 p-1.5" >
         <img

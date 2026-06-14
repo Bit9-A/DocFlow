@@ -7,6 +7,12 @@ import './blocks/divider.js';
 import './blocks/spacer.js';
 import './blocks/page-break.js';
 import './blocks/columns.js';
+import './blocks/page-number.js';
+import './blocks/signature.js';
+import './blocks/container.js';
+import './blocks/barcode.js';
+import './blocks/list.js';
+import './blocks/chart.js';
 
 import PDFDocument from 'pdfkit';
 import type {
@@ -47,14 +53,14 @@ export class PdfKitAdapter implements DocAdapter<Buffer> {
       },
     });
 
-
-
-    const ctx: PdfRenderContext = {
+    const ctx: PdfRenderContext & { deferredPageNumbers?: any[]; currentPageIdx?: number } = {
       doc,
       data,
       warnings,
       pageHeight: doc.page.height - schema.metadata.margins.bottom,
       marginBottom: schema.metadata.margins.bottom,
+      deferredPageNumbers: [],
+      currentPageIdx: 0,
     };
 
     let blocksProcessed = 0;
@@ -75,6 +81,7 @@ export class PdfKitAdapter implements DocAdapter<Buffer> {
         currentPageIdx = block.page;
       }
       
+      ctx.currentPageIdx = targetPageIdx;
       ctx.isAbsolute = block.x !== undefined || block.y !== undefined;
 
       if (block.x !== undefined || block.y !== undefined) {
@@ -179,6 +186,37 @@ export class PdfKitAdapter implements DocAdapter<Buffer> {
             doc.y = originalY;
           }
         }
+      }
+    }
+
+    // Process deferred page numbers
+    if (ctx.deferredPageNumbers && ctx.deferredPageNumbers.length > 0) {
+      for (const item of ctx.deferredPageNumbers) {
+        doc.switchToPage(item.page);
+        const pageData = {
+          ...data,
+          currentPage: item.page + 1,
+          totalPages: finalPageCount,
+          current: item.page + 1,
+          total: finalPageCount,
+          currentDate: new Date().toLocaleDateString(),
+        };
+        const pageCtx = {
+          ...ctx,
+          data: pageData,
+          isAbsolute: true,
+        };
+        const originalX = doc.x;
+        const originalY = doc.y;
+
+        doc.x = item.x;
+        doc.y = item.y;
+
+        const renderer = getPdfBlockRenderer(item.block.type);
+        renderer(item.block, pageCtx);
+
+        doc.x = originalX;
+        doc.y = originalY;
       }
     }
 

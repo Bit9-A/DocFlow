@@ -201,6 +201,18 @@ export function StyleInspector() {
           </InspectorSection>
         )}
 
+        {(block.type === 'heading' || block.type === 'paragraph') && (
+          <InspectorSection label="Content Text">
+            <AutocompleteTextarea
+              value={block.text ?? ''}
+              onValueChange={(v) => updateBlock(block.id, { text: v } as Partial<DocBlock>)}
+              className={`w-full bg-[#0d0d1e] text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[80px] ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+              placeholder="Text template (e.g. {{0.promedio}})..."
+              aria-label="Block text content template"
+            />
+          </InspectorSection>
+        )}
+
         {/* Typography */}
         {'styles' in block && ('fontSize' in (block.styles as object) || block.type === 'heading' || block.type === 'paragraph') ? (
           <>
@@ -305,6 +317,30 @@ export function StyleInspector() {
 
         {(block.type === 'header' || block.type === 'footer') && (
           <HeaderFooterPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'page-number' && (
+          <PageNumberPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'signature' && (
+          <SignaturePropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'container' && (
+          <ContainerPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'barcode' && (
+          <BarcodePropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'list' && (
+          <ListPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
+        )}
+
+        {block.type === 'chart' && (
+          <ChartPropertiesPanel block={block} updateBlock={updateBlock} isMobile={isMobile} />
         )}
 
         {/* Spacing */}
@@ -598,9 +634,55 @@ interface TablePropertiesPanelProps {
 function TablePropertiesPanel({ block, updateBlock, isMobile }: TablePropertiesPanelProps) {
   const [newColHeader, setNewColHeader] = useState('');
   const [newColValue, setNewColValue] = useState('');
+  const metadata = useDocumentStore((s) => s.metadata);
 
   function updateTableStyles(styles: Partial<typeof block.styles>) {
     updateBlock(block.id, { styles: { ...block.styles, ...styles } });
+  }
+
+  function handleAutoGenerate() {
+    if (!metadata.uploadedJson) return;
+    try {
+      const parsed = JSON.parse(metadata.uploadedJson);
+      let items: any = null;
+      if (Array.isArray(parsed)) {
+        items = parsed;
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        const resolvePath = (path: string, obj: any): any => {
+          if (!path) return obj;
+          const segments = path.trim().split('.');
+          let curr = obj;
+          for (const s of segments) {
+            if (curr && typeof curr === 'object' && s in curr) {
+              curr = curr[s];
+            } else {
+              return null;
+            }
+          }
+          return curr;
+        };
+        items = resolvePath(block.loopOver, parsed);
+      }
+
+      if (Array.isArray(items) && items.length > 0) {
+        const firstEl = items[0];
+        if (firstEl && typeof firstEl === 'object') {
+          const keys = Object.keys(firstEl);
+          if (keys.length > 0) {
+            const widthPct = Math.floor(100 / keys.length);
+            const columns = keys.map((key) => ({
+              header: key.charAt(0).toUpperCase() + key.slice(1),
+              value: `{{item.${key}}}`,
+              width: `${widthPct}%`,
+              align: 'left' as const,
+            }));
+            updateBlock(block.id, { columns });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to auto-generate columns:', e);
+    }
   }
 
   function handleAddColumn() {
@@ -631,16 +713,39 @@ function TablePropertiesPanel({ block, updateBlock, isMobile }: TablePropertiesP
   return (
     <>
       <InspectorSection label="Table Data Binding">
-        <div>
-          <label className="text-[10px] text-white/40 block mb-1">Loop Array (API Path)</label>
-          <AutocompleteInput
-            type="text"
-            value={block.loopOver}
-            onValueChange={(val) => updateBlock(block.id, { loopOver: val })}
-            className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
-            placeholder="factura.items"
-            aria-label="Table loop array path"
-          />
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Loop Array (API Path)</label>
+            <AutocompleteInput
+              type="text"
+              value={block.loopOver}
+              onValueChange={(val) => updateBlock(block.id, { loopOver: val })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+              placeholder="factura.items"
+              aria-label="Table loop array path"
+            />
+          </div>
+          <div>
+            <NumberInput
+              label="Row Limit (0 = unlimited)"
+              value={block.limit ?? 0}
+              min={0}
+              max={1000}
+              isMobile={isMobile}
+              onChange={(v) => updateBlock(block.id, { limit: v === 0 ? undefined : v })}
+            />
+          </div>
+          {metadata.uploadedJson && (
+            <div>
+              <button
+                type="button"
+                onClick={handleAutoGenerate}
+                className="w-full py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-400 rounded text-[10px] font-semibold transition-all mt-1"
+              >
+                Auto-generate Columns from Data
+              </button>
+            </div>
+          )}
         </div>
       </InspectorSection>
 
@@ -1656,6 +1761,384 @@ function VariablesExplorerList({
         </div>
       ))}
     </div>
+  );
+}
+
+function PageNumberPropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  return (
+    <InspectorSection label="Page Number Format">
+      <div>
+        <label className="text-[10px] text-white/40 block mb-1">Format Template</label>
+        <AutocompleteInput
+          type="text"
+          value={block.format}
+          onValueChange={(val) => updateBlock(block.id, { format: val })}
+          className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+          placeholder="Página {{currentPage}} de {{totalPages}}"
+        />
+        <p className="text-[9px] text-white/30 mt-1">Variables: `{{currentPage}}`, `{{totalPages}}`</p>
+      </div>
+    </InspectorSection>
+  );
+}
+
+function SignaturePropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  const updateStyles = (changes: any) => {
+    updateBlock(block.id, { styles: { ...block.styles, ...changes } });
+  };
+  return (
+    <>
+      <InspectorSection label="Signature Info">
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Label</label>
+            <input
+              type="text"
+              value={block.label}
+              onChange={(e) => updateBlock(block.id, { label: e.target.value })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Name</label>
+            <input
+              type="text"
+              value={block.name ?? ''}
+              onChange={(e) => updateBlock(block.id, { name: e.target.value })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Title / Role</label>
+            <input
+              type="text"
+              value={block.title ?? ''}
+              onChange={(e) => updateBlock(block.id, { title: e.target.value })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+            />
+          </div>
+        </div>
+      </InspectorSection>
+      <InspectorSection label="Signature Line Style">
+        <div className="space-y-3">
+          <NumberInput
+            label="Line Width (pt)"
+            value={block.styles.lineWidth ?? 1}
+            min={0.5}
+            max={10}
+            step={0.5}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ lineWidth: v })}
+          />
+          <NumberInput
+            label="Line Gap (pt)"
+            value={block.styles.gap ?? 8}
+            min={2}
+            max={50}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ gap: v })}
+          />
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Line Color</label>
+            <input
+              type="color"
+              value={block.styles.lineColor ?? '#9CA3AF'}
+              onChange={(e) => updateStyles({ lineColor: e.target.value })}
+              className="w-full h-8 rounded cursor-pointer border-0 bg-transparent"
+            />
+          </div>
+        </div>
+      </InspectorSection>
+    </>
+  );
+}
+
+function ContainerPropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  const updateStyles = (changes: any) => {
+    updateBlock(block.id, { styles: { ...block.styles, ...changes } });
+  };
+  return (
+    <InspectorSection label="Card Wrapper Style">
+      <div className="space-y-3">
+        <NumberInput
+          label="Inner Padding (px)"
+          value={block.styles.padding ?? 8}
+          min={0}
+          max={100}
+          isMobile={isMobile}
+          onChange={(v) => updateStyles({ padding: v })}
+        />
+        <NumberInput
+          label="Corner Radius (px)"
+          value={block.styles.borderRadius ?? 4}
+          min={0}
+          max={100}
+          isMobile={isMobile}
+          onChange={(v) => updateStyles({ borderRadius: v })}
+        />
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Background Color</label>
+          <input
+            type="color"
+            value={block.styles.backgroundColor ?? '#F9FAFB'}
+            onChange={(e) => updateStyles({ backgroundColor: e.target.value })}
+            className="w-full h-8 rounded cursor-pointer border-0 bg-transparent"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput
+            label="Border (pt)"
+            value={block.styles.borderWidth ?? 1}
+            min={0}
+            max={10}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ borderWidth: v })}
+          />
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Border Color</label>
+            <input
+              type="color"
+              value={block.styles.borderColor ?? '#E5E7EB'}
+              onChange={(e) => updateStyles({ borderColor: e.target.value })}
+              className="w-full h-8 rounded cursor-pointer border-0 bg-transparent"
+            />
+          </div>
+        </div>
+      </div>
+    </InspectorSection>
+  );
+}
+
+function BarcodePropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  const updateStyles = (changes: any) => {
+    updateBlock(block.id, { styles: { ...block.styles, ...changes } });
+  };
+  return (
+    <InspectorSection label="Barcode / QR Settings">
+      <div className="space-y-3">
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Format</label>
+          <select
+            value={block.format}
+            onChange={(e) => updateBlock(block.id, { format: e.target.value as any })}
+            className={`w-full bg-[#1e1e38] text-white/70 rounded border border-white/10 focus:outline-none cursor-pointer ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+          >
+            <option value="qr">QR Code (2D)</option>
+            <option value="code128">Code 128 (1D)</option>
+            <option value="ean13">EAN-13 (1D)</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Data / Value Template</label>
+          <AutocompleteInput
+            type="text"
+            value={block.value}
+            onValueChange={(val) => updateBlock(block.id, { value: val })}
+            className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+            placeholder="https://..."
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput
+            label="Width (px)"
+            value={block.styles.width ?? 80}
+            min={20}
+            max={1000}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ width: v })}
+          />
+          <NumberInput
+            label="Height (px)"
+            value={block.styles.height ?? 80}
+            min={20}
+            max={1000}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ height: v })}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Color</label>
+          <input
+            type="color"
+            value={block.styles.color ?? '#000000'}
+            onChange={(e) => updateStyles({ color: e.target.value })}
+            className="w-full h-8 rounded cursor-pointer border-0 bg-transparent"
+          />
+        </div>
+      </div>
+    </InspectorSection>
+  );
+}
+
+function ListPropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  const [newItemText, setNewItemText] = useState('');
+  const updateStyles = (changes: any) => {
+    updateBlock(block.id, { styles: { ...block.styles, ...changes } });
+  };
+
+  function handleAddItem() {
+    if (!newItemText.trim()) return;
+    updateBlock(block.id, { items: [...block.items, newItemText.trim()] });
+    setNewItemText('');
+  }
+
+  function handleRemoveItem(idx: number) {
+    updateBlock(block.id, { items: block.items.filter((_: any, i: any) => i !== idx) });
+  }
+
+  function handleItemChange(idx: number, val: string) {
+    updateBlock(block.id, { items: block.items.map((item: any, i: any) => (i === idx ? val : item)) });
+  }
+
+  return (
+    <>
+      <InspectorSection label="List Settings">
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-white/70">
+            <input
+              type="checkbox"
+              checked={block.ordered}
+              onChange={(e) => updateBlock(block.id, { ordered: e.target.checked })}
+              className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-0"
+            />
+            <span>Ordered / Numbered List</span>
+          </label>
+          {!block.ordered && (
+            <div>
+              <label className="text-[10px] text-white/40 block mb-1">Bullet Style</label>
+              <select
+                value={block.styles.bulletStyle ?? 'dot'}
+                onChange={(e) => updateStyles({ bulletStyle: e.target.value })}
+                className={`w-full bg-[#1e1e38] text-white/70 rounded border border-white/10 focus:outline-none cursor-pointer ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+              >
+                <option value="dot">Dot (•)</option>
+                <option value="dash">Dash (-)</option>
+                <option value="checkmark">Checkmark (✓)</option>
+              </select>
+            </div>
+          )}
+          <NumberInput
+            label="Item Spacing (px)"
+            value={block.styles.itemSpacing ?? 4}
+            min={0}
+            max={40}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ itemSpacing: v })}
+          />
+        </div>
+      </InspectorSection>
+      <InspectorSection label="List Items">
+        <div className="space-y-2">
+          {block.items.map((item: string, idx: number) => (
+            <div key={idx} className="flex items-center gap-1.5 bg-white/5 p-1 rounded relative group">
+              <AutocompleteInput
+                type="text"
+                value={item}
+                onValueChange={(val) => handleItemChange(idx, val)}
+                className="flex-1 bg-transparent text-white/70 text-xs px-1 focus:outline-none focus:bg-white/10 rounded"
+              />
+              <button
+                onClick={() => handleRemoveItem(idx)}
+                className="text-white/30 hover:text-red-400 p-0.5"
+                aria-label="Remove item"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-1.5 pt-1">
+            <AutocompleteInput
+              type="text"
+              placeholder="Add list item..."
+              value={newItemText}
+              onValueChange={(val) => setNewItemText(val)}
+              className={`flex-1 bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none text-xs px-2 py-1`}
+            />
+            <button
+              onClick={handleAddItem}
+              className="p-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs"
+              aria-label="Add item"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+        </div>
+      </InspectorSection>
+    </>
+  );
+}
+
+function ChartPropertiesPanel({ block, updateBlock, isMobile }: { block: any; updateBlock: any; isMobile: boolean }) {
+  const updateStyles = (changes: any) => {
+    updateBlock(block.id, { styles: { ...block.styles, ...changes } });
+  };
+  return (
+    <InspectorSection label="Chart Properties">
+      <div className="space-y-3">
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Chart Type</label>
+          <select
+            value={block.chartType}
+            onChange={(e) => updateBlock(block.id, { chartType: e.target.value as any })}
+            className={`w-full bg-[#1e1e38] text-white/70 rounded border border-white/10 focus:outline-none cursor-pointer ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+          >
+            <option value="bar">Bar Chart</option>
+            <option value="line">Line Chart</option>
+            <option value="pie">Pie Chart</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-white/40 block mb-1">Loop Array Data Source</label>
+          <AutocompleteInput
+            type="text"
+            value={block.loopOver}
+            onValueChange={(val) => updateBlock(block.id, { loopOver: val })}
+            className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+            placeholder="ventas"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Label Key</label>
+            <input
+              type="text"
+              value={block.labelKey}
+              onChange={(e) => updateBlock(block.id, { labelKey: e.target.value })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+              placeholder="mes"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/40 block mb-1">Value Key</label>
+            <input
+              type="text"
+              value={block.valueKey}
+              onChange={(e) => updateBlock(block.id, { valueKey: e.target.value })}
+              className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
+              placeholder="monto"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput
+            label="Width (px)"
+            value={block.styles.width ?? 350}
+            min={100}
+            max={800}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ width: v })}
+          />
+          <NumberInput
+            label="Height (px)"
+            value={block.styles.height ?? 150}
+            min={50}
+            max={600}
+            isMobile={isMobile}
+            onChange={(v) => updateStyles({ height: v })}
+          />
+        </div>
+      </div>
+    </InspectorSection>
   );
 }
 

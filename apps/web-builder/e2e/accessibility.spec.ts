@@ -6,7 +6,7 @@ test.describe('DocFlow Accessibility & Keyboard Navigation E2E Tests', () => {
     await page.goto('/editor');
     
     // Wait for the main page elements to render
-    await expect(page.locator('text=DocFlow')).toBeVisible();
+    await expect(page.getByAltText('DocFlow')).toBeVisible();
 
     const accessibilityScanResults = await new AxeBuilder({ page })
       // Disable rules that are external or known issues in development setup if any
@@ -20,7 +20,7 @@ test.describe('DocFlow Accessibility & Keyboard Navigation E2E Tests', () => {
     await page.goto('/editor');
 
     // Initially, there's no selection
-    await expect(page.locator('aside[aria-label="Style inspector — no selection"]')).toBeVisible();
+    await expect(page.locator('aside[aria-label="Style inspector — page settings"]')).toBeVisible();
 
     // The canvas has a button to add heading when empty
     const addHeadingButton = page.getByRole('button', { name: 'Add Heading' });
@@ -70,6 +70,7 @@ test.describe('DocFlow Accessibility & Keyboard Navigation E2E Tests', () => {
     await page.waitForTimeout(250);
 
     // It should announce coordinate change
-    await expect(page.locator('#canvas-announcer')).toContainText('Moved block to position 50, 45');
+    await expect(page.locator('#canvas-announcer')).toContainText('Moved block to 50, 45');
   });
 });
+

@@ -1,5 +1,6 @@
 import type { DocBlock, DocBlockType, DocFlowSchema } from '@docflow/core';
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { temporal } from 'zundo';
 import { nanoid } from 'nanoid';
 
@@ -76,59 +77,104 @@ function createDefaultBlock(type: DocBlockType): DocBlock {
       return { id, type: 'header', blocks: [], styles: baseStyles };
     case 'footer':
       return { id, type: 'footer', blocks: [], styles: baseStyles };
+    case 'page-number':
+      return {
+        id,
+        type: 'page-number',
+        format: 'Página {{currentPage}} de {{totalPages}}',
+        styles: { fontSize: 9, color: '#6B7280', textAlign: 'right' },
+      };
+    case 'signature':
+      return {
+        id,
+        type: 'signature',
+        label: 'Firma Autorizada',
+        name: 'John Doe',
+        title: 'Gerente General',
+        styles: { lineWidth: 1, lineColor: '#9CA3AF', gap: 8, fontSize: 10, color: '#374151' },
+      };
+    case 'container':
+      return {
+        id,
+        type: 'container',
+        blocks: [],
+        styles: { padding: 12, borderRadius: 6, backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', borderWidth: 1 },
+      };
+    case 'barcode':
+      return {
+        id,
+        type: 'barcode',
+        format: 'qr',
+        value: 'https://docflow.dev',
+        styles: { width: 100, height: 100, color: '#000000' },
+      };
+    case 'list':
+      return {
+        id,
+        type: 'list',
+        ordered: false,
+        items: ['Primer elemento de la lista', 'Segundo elemento de la lista', 'Tercer elemento de la lista'],
+        styles: { fontSize: 11, color: '#374151', bulletStyle: 'dot', itemSpacing: 4, lineHeight: 1.3 },
+      };
+    case 'chart':
+      return {
+        id,
+        type: 'chart',
+        chartType: 'bar',
+        loopOver: 'ventas',
+        labelKey: 'mes',
+        valueKey: 'monto',
+        styles: { width: 350, height: 150, colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'] },
+      };
   }
+}
+
+interface ContainerInfo {
+  type: 'root' | 'header' | 'footer' | 'columns';
+  parentBlock?: DocBlock;
+  colIdx?: number;
+}
+
+function findSelectedContainer(
+  blocks: DocBlock[],
+  selectedId: string | null,
+  parent?: DocBlock,
+  colIdx?: number,
+): ContainerInfo | null {
+  if (!selectedId) return null;
+
+  for (const b of blocks) {
+    if (b.id === selectedId) {
+      if (parent) {
+        if (parent.type === 'header') return { type: 'header', parentBlock: parent };
+        if (parent.type === 'footer') return { type: 'footer', parentBlock: parent };
+        if (parent.type === 'columns') return { type: 'columns', parentBlock: parent, colIdx };
+      }
+      return { type: 'root' };
+    }
+
+    if (b.type === 'header' || b.type === 'footer') {
+      const res = findSelectedContainer(b.blocks, selectedId, b);
+      if (res) return res;
+    }
+
+    if (b.type === 'columns') {
+      for (let i = 0; i < b.columns.length; i++) {
+        const res = findSelectedContainer(b.columns[i].blocks, selectedId, b, i);
+        if (res) return res;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getSelectedBlockContainer(
   ast: DocBlock[],
   selectedId: string | null,
-): { type: 'root' | 'header' | 'footer'; parentBlock?: DocBlock } {
-  if (!selectedId) return { type: 'root' };
-
-  const headerBlock = ast.find((b) => b.type === 'header');
-  const footerBlock = ast.find((b) => b.type === 'footer');
-
-  if (headerBlock) {
-    if (headerBlock.id === selectedId) {
-      return { type: 'header', parentBlock: headerBlock };
-    }
-    const isInsideHeader = (blocks: DocBlock[]): boolean => {
-      for (const b of blocks) {
-        if (b.id === selectedId) return true;
-        if (b.type === 'columns') {
-          for (const col of b.columns) {
-            if (isInsideHeader(col.blocks)) return true;
-          }
-        }
-      }
-      return false;
-    };
-    if (isInsideHeader(headerBlock.blocks)) {
-      return { type: 'header', parentBlock: headerBlock };
-    }
-  }
-
-  if (footerBlock) {
-    if (footerBlock.id === selectedId) {
-      return { type: 'footer', parentBlock: footerBlock };
-    }
-    const isInsideFooter = (blocks: DocBlock[]): boolean => {
-      for (const b of blocks) {
-        if (b.id === selectedId) return true;
-        if (b.type === 'columns') {
-          for (const col of b.columns) {
-            if (isInsideFooter(col.blocks)) return true;
-          }
-        }
-      }
-      return false;
-    };
-    if (isInsideFooter(footerBlock.blocks)) {
-      return { type: 'footer', parentBlock: footerBlock };
-    }
-  }
-
-  return { type: 'root' };
+): ContainerInfo {
+  const res = findSelectedContainer(ast, selectedId);
+  return res ?? { type: 'root' };
 }
 
 // ============================================================
@@ -154,6 +200,7 @@ interface DocumentState {
 
   // Block mutations
   addBlock: (type: DocBlockType, afterId?: string) => void;
+  addBlockToColumn: (columnsBlockId: string, colIdx: number, type: DocBlockType) => void;
   updateBlock: (id: string, changes: Partial<DocBlock>) => void;
   removeBlock: (id: string) => void;
   moveBlock: (fromIndex: number, toIndex: number) => void;
@@ -171,137 +218,225 @@ interface DocumentState {
 }
 
 export const useDocumentStore = create<DocumentState>()(
-  temporal(
-    (set, get) => ({
-      ast: [],
-      metadata: {
-        title: 'Untitled Document',
-        pageSize: 'LETTER',
-        orientation: 'portrait',
-        margins: { top: 40, bottom: 40, left: 50, right: 50 },
-        author: '',
-        subject: '',
-        keywords: [],
-        customVariables: [],
-        uploadedJson: '',
-      },
-      selectedBlockId: null,
+  persist(
+    temporal(
+      (set, get) => ({
+        ast: [],
+        metadata: {
+          title: 'Untitled Document',
+          pageSize: 'LETTER',
+          orientation: 'portrait',
+          margins: { top: 40, bottom: 40, left: 50, right: 50 },
+          author: '',
+          subject: '',
+          keywords: [],
+          customVariables: [],
+          uploadedJson: '',
+        },
+        selectedBlockId: null,
 
-      addBlock: (type, afterId) => {
-        const block = createDefaultBlock(type);
-        const margins = get().metadata.margins;
+        addBlockToColumn: (columnsBlockId, colIdx, type) => {
+          const block = createDefaultBlock(type);
+          const margins = get().metadata.margins;
 
-        if (type === 'image') {
-          block.width = 150;
-          block.height = 100;
-        } else if (type === 'divider') {
-          block.width = 250;
-        } else if (type === 'spacer') {
-          block.width = 100;
-          block.height = 24;
-        } else {
-          block.width = 250;
-        }
+          if (type === 'image') {
+            block.width = 150;
+            block.height = 100;
+          } else if (type === 'divider') {
+            block.width = 250;
+          } else if (type === 'spacer') {
+            block.width = 100;
+            block.height = 24;
+          } else if (type === 'chart') {
+            block.width = 350;
+            block.height = 150;
+          } else if (type === 'barcode') {
+            block.width = 100;
+            block.height = 100;
+          } else if (type === 'container') {
+            block.width = 350;
+            block.height = 150;
+          } else if (type === 'signature') {
+            block.width = 150;
+          } else if (type === 'page-number') {
+            block.width = 150;
+          } else {
+            block.width = 250;
+          }
 
-        const selectedId = get().selectedBlockId;
-        const container = getSelectedBlockContainer(get().ast, selectedId);
+          block.x = margins.left;
+          block.y = 10;
+          block.page = 0;
 
-        if (type !== 'header' && type !== 'footer') {
-          if (container.type === 'header' && container.parentBlock) {
-            block.x = margins.left;
-            block.y = 10 + ((container.parentBlock as any).blocks?.length ?? 0) * 20;
-            set((state) => {
-              const ast = state.ast.map((b) => {
-                if (b.id === container.parentBlock!.id) {
+          set((state) => {
+            const updateColumnsAst = (blocks: DocBlock[]): DocBlock[] => {
+              return blocks.map((b) => {
+                if (b.id === columnsBlockId && b.type === 'columns') {
+                  const newCols = b.columns.map((col, idx) => {
+                    if (idx === colIdx) {
+                      return {
+                        ...col,
+                        blocks: [...col.blocks, block],
+                      };
+                    }
+                    return col;
+                  });
+                  return { ...b, columns: newCols } as DocBlock;
+                }
+                if (b.type === 'header' || b.type === 'footer') {
+                  return { ...b, blocks: updateColumnsAst(b.blocks) } as DocBlock;
+                }
+                if (b.type === 'columns') {
                   return {
                     ...b,
-                    blocks: [...((b as any).blocks ?? []), block],
+                    columns: b.columns.map((c) => ({
+                      ...c,
+                      blocks: updateColumnsAst(c.blocks),
+                    })),
                   } as DocBlock;
                 }
                 return b;
               });
-              return { ast, selectedBlockId: block.id };
-            });
-            return;
-          }
-
-          if (container.type === 'footer' && container.parentBlock) {
-            block.x = margins.left;
-            block.y = 10 + ((container.parentBlock as any).blocks?.length ?? 0) * 20;
-            set((state) => {
-              const ast = state.ast.map((b) => {
-                if (b.id === container.parentBlock!.id) {
-                  return {
-                    ...b,
-                    blocks: [...((b as any).blocks ?? []), block],
-                  } as DocBlock;
-                }
-                return b;
-              });
-              return { ast, selectedBlockId: block.id };
-            });
-            return;
-          }
-        }
-
-        // Initialize absolute coordinates and default sizes for root level
-        block.x = margins.left;
-        block.y = margins.top + get().ast.length * 35;
-        block.page = 0;
-
-        set((state) => {
-          const ast = [...state.ast];
-          if (afterId) {
-            const idx = ast.findIndex((b) => b.id === afterId);
-            if (idx !== -1) {
-              ast.splice(idx + 1, 0, block);
-              return { ast, selectedBlockId: block.id };
-            }
-          }
-          // If no afterId or not found, just append
-          return { ast: [...state.ast, block], selectedBlockId: block.id };
-        });
-      },
-
-      updateBlock: (id, changes) => {
-        const updateNested = (blocks: DocBlock[]): DocBlock[] => {
-          return blocks.map((b) => {
-            if (b.id === id) {
-              return { ...b, ...changes } as DocBlock;
-            }
-            if (b.type === 'header' || b.type === 'footer') {
-              return {
-                ...b,
-                blocks: updateNested(b.blocks),
-              } as DocBlock;
-            }
-            if (b.type === 'columns') {
-              return {
-                ...b,
-                columns: b.columns.map((col) => ({
-                  ...col,
-                  blocks: updateNested(col.blocks),
-                })),
-              } as DocBlock;
-            }
-            return b;
+            };
+            return { ast: updateColumnsAst(state.ast), selectedBlockId: block.id };
           });
-        };
+        },
 
-        set((state) => ({
-          ast: updateNested(state.ast),
-        }));
-      },
+        addBlock: (type, afterId) => {
+          const block = createDefaultBlock(type);
+          const margins = get().metadata.margins;
 
-      removeBlock: (id) => {
-        const removeNested = (blocks: DocBlock[]): DocBlock[] => {
-          return blocks
-            .filter((b) => b.id !== id)
-            .map((b) => {
+          if (type === 'image') {
+            block.width = 150;
+            block.height = 100;
+          } else if (type === 'divider') {
+            block.width = 250;
+          } else if (type === 'spacer') {
+            block.width = 100;
+            block.height = 24;
+          } else if (type === 'chart') {
+            block.width = 350;
+            block.height = 150;
+          } else if (type === 'barcode') {
+            block.width = 100;
+            block.height = 100;
+          } else if (type === 'container') {
+            block.width = 350;
+            block.height = 150;
+          } else if (type === 'signature') {
+            block.width = 150;
+          } else if (type === 'page-number') {
+            block.width = 150;
+          } else {
+            block.width = 250;
+          }
+
+          const selectedId = get().selectedBlockId;
+          const container = getSelectedBlockContainer(get().ast, selectedId);
+
+          if (type !== 'header' && type !== 'footer') {
+            if (container.type === 'header' && container.parentBlock) {
+              block.x = margins.left;
+              block.y = 10 + ((container.parentBlock as any).blocks?.length ?? 0) * 20;
+              set((state) => {
+                const ast = state.ast.map((b) => {
+                  if (b.id === container.parentBlock!.id) {
+                    return {
+                      ...b,
+                      blocks: [...((b as any).blocks ?? []), block],
+                    } as DocBlock;
+                  }
+                  return b;
+                });
+                return { ast, selectedBlockId: block.id };
+              });
+              return;
+            }
+
+            if (container.type === 'footer' && container.parentBlock) {
+              block.x = margins.left;
+              block.y = 10 + ((container.parentBlock as any).blocks?.length ?? 0) * 20;
+              set((state) => {
+                const ast = state.ast.map((b) => {
+                  if (b.id === container.parentBlock!.id) {
+                    return {
+                      ...b,
+                      blocks: [...((b as any).blocks ?? []), block],
+                    } as DocBlock;
+                  }
+                  return b;
+                });
+                return { ast, selectedBlockId: block.id };
+              });
+              return;
+            }
+
+            if (container.type === 'columns' && container.parentBlock && container.colIdx !== undefined) {
+              set((state) => {
+                const updateColumnsAst = (blocks: DocBlock[]): DocBlock[] => {
+                  return blocks.map((b) => {
+                    if (b.id === container.parentBlock!.id && b.type === 'columns') {
+                      const newCols = b.columns.map((col, idx) => {
+                        if (idx === container.colIdx) {
+                          return {
+                            ...col,
+                            blocks: [...col.blocks, block],
+                          };
+                        }
+                        return col;
+                      });
+                      return { ...b, columns: newCols } as DocBlock;
+                    }
+                    if (b.type === 'header' || b.type === 'footer') {
+                      return { ...b, blocks: updateColumnsAst(b.blocks) } as DocBlock;
+                    }
+                    if (b.type === 'columns') {
+                      return {
+                        ...b,
+                        columns: b.columns.map((c) => ({
+                          ...c,
+                          blocks: updateColumnsAst(c.blocks),
+                        })),
+                      } as DocBlock;
+                    }
+                    return b;
+                  });
+                };
+                return { ast: updateColumnsAst(state.ast), selectedBlockId: block.id };
+              });
+              return;
+            }
+          }
+
+          // Initialize absolute coordinates and default sizes for root level
+          block.x = margins.left;
+          block.y = margins.top + get().ast.length * 35;
+          block.page = 0;
+
+          set((state) => {
+            const ast = [...state.ast];
+            if (afterId) {
+              const idx = ast.findIndex((b) => b.id === afterId);
+              if (idx !== -1) {
+                ast.splice(idx + 1, 0, block);
+                return { ast, selectedBlockId: block.id };
+              }
+            }
+            // If no afterId or not found, just append
+            return { ast: [...state.ast, block], selectedBlockId: block.id };
+          });
+        },
+
+        updateBlock: (id, changes) => {
+          const updateNested = (blocks: DocBlock[]): DocBlock[] => {
+            return blocks.map((b) => {
+              if (b.id === id) {
+                return { ...b, ...changes } as DocBlock;
+              }
               if (b.type === 'header' || b.type === 'footer') {
                 return {
                   ...b,
-                  blocks: removeNested(b.blocks),
+                  blocks: updateNested(b.blocks),
                 } as DocBlock;
               }
               if (b.type === 'columns') {
@@ -309,110 +444,147 @@ export const useDocumentStore = create<DocumentState>()(
                   ...b,
                   columns: b.columns.map((col) => ({
                     ...col,
-                    blocks: removeNested(col.blocks),
+                    blocks: updateNested(col.blocks),
                   })),
                 } as DocBlock;
               }
               return b;
             });
-        };
-
-        set((state) => ({
-          ast: removeNested(state.ast),
-          selectedBlockId:
-            state.selectedBlockId === id ? null : state.selectedBlockId,
-        }));
-      },
-
-      moveBlock: (fromIndex, toIndex) => {
-        set((state) => {
-          const ast = [...state.ast];
-          const [moved] = ast.splice(fromIndex, 1);
-          if (moved !== undefined) {
-            ast.splice(toIndex, 0, moved);
-          }
-          return { ast };
-        });
-      },
-
-      duplicateBlock: (id) => {
-        set((state) => {
-          const idx = state.ast.findIndex((b) => b.id === id);
-          if (idx === -1) return state;
-          const original = state.ast[idx];
-          if (original === undefined) return state;
-          const duplicate: DocBlock = {
-            ...original,
-            id: `blk_${nanoid(8)}`,
-            x: original.x !== undefined ? original.x + 20 : undefined,
-            y: original.y !== undefined ? original.y + 20 : undefined,
           };
-          const ast = [...state.ast];
-          ast.splice(idx + 1, 0, duplicate);
-          return { ast, selectedBlockId: duplicate.id };
-        });
+
+          set((state) => ({
+            ast: updateNested(state.ast),
+          }));
+        },
+
+        removeBlock: (id) => {
+          const removeNested = (blocks: DocBlock[]): DocBlock[] => {
+            return blocks
+              .filter((b) => b.id !== id)
+              .map((b) => {
+                if (b.type === 'header' || b.type === 'footer') {
+                  return {
+                    ...b,
+                    blocks: removeNested(b.blocks),
+                  } as DocBlock;
+                }
+                if (b.type === 'columns') {
+                  return {
+                    ...b,
+                    columns: b.columns.map((col) => ({
+                      ...col,
+                      blocks: removeNested(col.blocks),
+                    })),
+                  } as DocBlock;
+                }
+                return b;
+              });
+          };
+
+          set((state) => ({
+            ast: removeNested(state.ast),
+            selectedBlockId:
+              state.selectedBlockId === id ? null : state.selectedBlockId,
+          }));
+        },
+
+        moveBlock: (fromIndex, toIndex) => {
+          set((state) => {
+            const ast = [...state.ast];
+            const [moved] = ast.splice(fromIndex, 1);
+            if (moved !== undefined) {
+              ast.splice(toIndex, 0, moved);
+            }
+            return { ast };
+          });
+        },
+
+        duplicateBlock: (id) => {
+          set((state) => {
+            const idx = state.ast.findIndex((b) => b.id === id);
+            if (idx === -1) return state;
+            const original = state.ast[idx];
+            if (original === undefined) return state;
+            const duplicate: DocBlock = {
+              ...original,
+              id: `blk_${nanoid(8)}`,
+              x: original.x !== undefined ? original.x + 20 : undefined,
+              y: original.y !== undefined ? original.y + 20 : undefined,
+            };
+            const ast = [...state.ast];
+            ast.splice(idx + 1, 0, duplicate);
+            return { ast, selectedBlockId: duplicate.id };
+          });
+        },
+
+        selectBlock: (id) => set({ selectedBlockId: id }),
+
+        updateMetadata: (changes) => {
+          set((state) => ({
+            metadata: { ...state.metadata, ...changes },
+          }));
+        },
+
+        exportSchema: (): DocFlowSchema => {
+          const { ast, metadata } = get();
+          let currentPageIdx = 0;
+          const resolvedAst = ast.map((block) => {
+            if (block.type === 'header' || block.type === 'footer') {
+              return block;
+            }
+            const updatedBlock = { ...block, page: currentPageIdx };
+            if (block.type === 'page-break') {
+              currentPageIdx++;
+            }
+            return updatedBlock;
+          });
+
+          return {
+            $schema: 'https://docflow.dev/schemas/v1.json',
+            version: '1.0.0',
+            metadata: {
+              ...metadata,
+              createdAt: new Date().toISOString(),
+            },
+            ast: resolvedAst,
+          };
+        },
+
+        importSchema: (schema) => {
+          set({
+            ast: schema.ast,
+            metadata: {
+              title: schema.metadata.title,
+              pageSize: schema.metadata.pageSize,
+              orientation: schema.metadata.orientation,
+              margins: schema.metadata.margins,
+              author: schema.metadata.author ?? '',
+              subject: schema.metadata.subject ?? '',
+              keywords: schema.metadata.keywords ?? [],
+              customVariables: schema.metadata.customVariables ?? [],
+              uploadedJson: schema.metadata.uploadedJson ?? '',
+            },
+            selectedBlockId: null,
+          });
+        },
+      }),
+      {
+        // zundo config: only track ast and metadata changes, not selection
+        partialize: (state) => ({
+          ast: state.ast,
+          metadata: state.metadata,
+        }),
+        limit: 50, // max 50 undo steps
       },
-
-      selectBlock: (id) => set({ selectedBlockId: id }),
-
-      updateMetadata: (changes) => {
-        set((state) => ({
-          metadata: { ...state.metadata, ...changes },
-        }));
-      },
-
-      exportSchema: (): DocFlowSchema => {
-        const { ast, metadata } = get();
-        let currentPageIdx = 0;
-        const resolvedAst = ast.map((block) => {
-          if (block.type === 'header' || block.type === 'footer') {
-            return block;
-          }
-          const updatedBlock = { ...block, page: currentPageIdx };
-          if (block.type === 'page-break') {
-            currentPageIdx++;
-          }
-          return updatedBlock;
-        });
-
-        return {
-          $schema: 'https://docflow.dev/schemas/v1.json',
-          version: '1.0.0',
-          metadata: {
-            ...metadata,
-            createdAt: new Date().toISOString(),
-          },
-          ast: resolvedAst,
-        };
-      },
-
-      importSchema: (schema) => {
-        set({
-          ast: schema.ast,
-          metadata: {
-            title: schema.metadata.title,
-            pageSize: schema.metadata.pageSize,
-            orientation: schema.metadata.orientation,
-            margins: schema.metadata.margins,
-            author: schema.metadata.author ?? '',
-            subject: schema.metadata.subject ?? '',
-            keywords: schema.metadata.keywords ?? [],
-            customVariables: schema.metadata.customVariables ?? [],
-            uploadedJson: schema.metadata.uploadedJson ?? '',
-          },
-          selectedBlockId: null,
-        });
-      },
-    }),
+    ),
     {
-      // zundo config: only track ast and metadata changes, not selection
+      name: 'docflow-document-store',
       partialize: (state) => ({
         ast: state.ast,
         metadata: state.metadata,
       }),
-      limit: 50, // max 50 undo steps
-    },
-  ),
+    }
+  )
 );
 
 // Expose undo/redo from the temporal store

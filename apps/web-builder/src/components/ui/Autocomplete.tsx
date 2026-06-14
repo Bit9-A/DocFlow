@@ -24,7 +24,7 @@ export function flattenJsonKeys(obj: any, prefix = ''): string[] {
     // Add paths for the first element as a representative model
     const firstEl = obj[0];
     if (firstEl !== undefined) {
-      const arrayPrefix = `${prefix}.0`;
+      const arrayPrefix = prefix ? `${prefix}.0` : '0';
       if (typeof firstEl === 'object' && firstEl !== null) {
         paths = paths.concat(flattenJsonKeys(firstEl, arrayPrefix));
       } else {
@@ -101,6 +101,17 @@ export function Autocomplete({
 
   // 1. Gather all suggestions
   const systemVars = ['currentPage', 'totalPages', 'currentDate'];
+  const systemFunctions = [
+    'SUM(',
+    'AVG(',
+    'COUNT(',
+    'ADD(',
+    'SUB(',
+    'MUL(',
+    'DIV(',
+    'ROUND(',
+    'FORMAT_CURRENCY(',
+  ];
   
   const customVars = (metadata.customVariables ?? []).map((v) => v.key);
   
@@ -119,6 +130,7 @@ export function Autocomplete({
   const allVars = Array.from(
     new Set([
       ...systemVars,
+      ...systemFunctions,
       ...customVars,
       ...jsonVars,
       ...tableItemVars,
@@ -203,6 +215,9 @@ export function Autocomplete({
         if (systemVars.includes(item)) {
           typeLabel = 'System';
           typeColor = 'text-green-400 bg-green-500/10 border-green-500/20';
+        } else if (systemFunctions.includes(item)) {
+          typeLabel = 'Function';
+          typeColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20';
         } else if (customVars.includes(item)) {
           typeLabel = 'Custom';
           typeColor = 'text-purple-400 bg-purple-500/10 border-purple-500/20';
@@ -214,7 +229,7 @@ export function Autocomplete({
         return (
           <div
             key={item}
-            onClick={(e) => {
+            onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               onSelect(item);
@@ -275,7 +290,7 @@ export function AutocompleteInput({
 
     const selStart = el.selectionStart ?? 0;
     const beforeCursor = val.slice(0, selStart);
-    const triggerMatch = beforeCursor.match(/\{\{([a-zA-Z0-9._]*)$/);
+    const triggerMatch = beforeCursor.match(/(?:\{\{|\(|\,)\s*([a-zA-Z0-9._]*)$/);
 
     if (triggerMatch) {
       const rect = el.getBoundingClientRect();
@@ -301,7 +316,10 @@ export function AutocompleteInput({
     const afterCursor = val.slice(selStart);
     
     // Replace the matched dynamic prefix with selected variable
-    const updatedBefore = beforeCursor.replace(/\{\{([a-zA-Z0-9._]*)$/, `{{${variable}}}`);
+    const updatedBefore = beforeCursor.replace(/(?:(\{\{|\(|\,)\s*)([a-zA-Z0-9._]*)$/, (_, trigger, _query) => {
+      const suffix = trigger === '{{' ? '}}' : '';
+      return `${trigger}${variable}${suffix}`;
+    });
     const newVal = updatedBefore + afterCursor;
     onValueChange(newVal);
 
@@ -369,7 +387,7 @@ export function AutocompleteTextarea({
 
     const selStart = el.selectionStart ?? 0;
     const beforeCursor = val.slice(0, selStart);
-    const triggerMatch = beforeCursor.match(/\{\{([a-zA-Z0-9._]*)$/);
+    const triggerMatch = beforeCursor.match(/(?:\{\{|\(|\,)\s*([a-zA-Z0-9._]*)$/);
 
     if (triggerMatch) {
       const rect = el.getBoundingClientRect();
@@ -394,7 +412,10 @@ export function AutocompleteTextarea({
     const beforeCursor = val.slice(0, selStart);
     const afterCursor = val.slice(selStart);
 
-    const updatedBefore = beforeCursor.replace(/\{\{([a-zA-Z0-9._]*)$/, `{{${variable}}}`);
+    const updatedBefore = beforeCursor.replace(/(?:(\{\{|\(|\,)\s*)([a-zA-Z0-9._]*)$/, (_, trigger, _query) => {
+      const suffix = trigger === '{{' ? '}}' : '';
+      return `${trigger}${variable}${suffix}`;
+    });
     const newVal = updatedBefore + afterCursor;
     onValueChange(newVal);
 

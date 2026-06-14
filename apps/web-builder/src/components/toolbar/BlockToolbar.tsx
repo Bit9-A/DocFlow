@@ -11,6 +11,12 @@ import {
   Scissors,
   Space,
   Type,
+  Hash,
+  FileSignature,
+  Box,
+  QrCode,
+  List,
+  BarChart,
 } from 'lucide-react';
 import { useDocumentStore } from '@/store/useDocumentStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -71,6 +77,42 @@ const BLOCK_OPTIONS: BlockOption[] = [
     label: 'Page Break',
     icon: <Scissors size={18} />,
     description: 'Force a new PDF page',
+  },
+  {
+    type: 'page-number',
+    label: 'Page Number',
+    icon: <Hash size={18} />,
+    description: 'Dynamic page counter',
+  },
+  {
+    type: 'signature',
+    label: 'Signature',
+    icon: <FileSignature size={18} />,
+    description: 'Interactive signature line',
+  },
+  {
+    type: 'container',
+    label: 'Container',
+    icon: <Box size={18} />,
+    description: 'Card layout container',
+  },
+  {
+    type: 'barcode',
+    label: 'Barcode / QR',
+    icon: <QrCode size={18} />,
+    description: 'Vector QR or Code128',
+  },
+  {
+    type: 'list',
+    label: 'List',
+    icon: <List size={18} />,
+    description: 'Ordered or bullet lists',
+  },
+  {
+    type: 'chart',
+    label: 'Chart',
+    icon: <BarChart size={18} />,
+    description: 'Bar, line, or pie charts',
   },
 ];
 

@@ -137,6 +137,78 @@ function renderBlock(
     case 'columns':
       return renderColumnsHtml(block, data, warnings);
 
+    case 'page-number': {
+      const text = interpolateHtml(block.format, data)
+        .replace(/{{current}}/g, String(data['currentPage'] ?? 1))
+        .replace(/{{total}}/g, String(data['totalPages'] ?? 1))
+        .replace(/{{currentPage}}/g, String(data['currentPage'] ?? 1))
+        .replace(/{{totalPages}}/g, String(data['totalPages'] ?? 1));
+      return `<div style="${absoluteStylesCss(block)};${textStyles(block.styles)}">${text}</div>`;
+    }
+
+    case 'signature': {
+      const thickness = block.styles.lineWidth ?? 1;
+      const lineColor = block.styles.lineColor ?? '#9CA3AF';
+      const gap = block.styles.gap ?? 8;
+      const fontSize = block.styles.fontSize ?? 10;
+      const color = block.styles.color ?? '#374151';
+      const width = block.width !== undefined ? `${block.width}pt` : '150px';
+      const label = escapeHtml(block.label);
+      const name = block.name ? `<strong>${escapeHtml(block.name)}</strong>` : '';
+      const title = block.title ? `<em>${escapeHtml(block.title)}</em>` : '';
+      return `
+        <div style="${absoluteStylesCss(block)};display:inline-block;width:${width};${baseStylesCss(block.styles)}">
+          <div style="border-top:${thickness}px solid ${lineColor};margin-bottom:${gap}px;width:100%;"></div>
+          <div style="text-align:center;font-size:${fontSize}px;color:${color};font-family:sans-serif;line-height:1.4;">
+            <div>${label}</div>
+            ${name ? `<div>${name}</div>` : ''}
+            ${title ? `<div>${title}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    case 'container': {
+      const padding = block.styles.padding ?? 8;
+      const borderRadius = block.styles.borderRadius ?? 0;
+      const bgColor = block.styles.backgroundColor ?? 'transparent';
+      const borderColor = block.styles.borderColor ?? 'transparent';
+      const borderWidth = block.styles.borderWidth ?? 0;
+      const innerHtml = block.blocks.map((b) => renderBlock(b, data, warnings)).join('\n');
+      const borderStyle = borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none';
+      const containerWidth = block.width !== undefined ? `width:${block.width}pt;` : 'width:100%;';
+      return `
+        <div style="${absoluteStylesCss(block)};${containerWidth}background-color:${bgColor};border:${borderStyle};border-radius:${borderRadius}px;padding:${padding}px;${baseStylesCss(block.styles)}">
+          ${innerHtml}
+        </div>`;
+    }
+
+    case 'barcode':
+      return renderBarcodeHtml(block, data);
+
+    case 'list': {
+      const listTag = block.ordered ? 'ol' : 'ul';
+      const fontStyle = textStyles(block.styles);
+      const spacing = block.styles.itemSpacing !== undefined ? `margin-bottom:${block.styles.itemSpacing}px;` : '';
+      
+      let listStyleType = '';
+      if (!block.ordered) {
+        if (block.styles.bulletStyle === 'dash') listStyleType = 'list-style-type:dash;';
+        else if (block.styles.bulletStyle === 'checkmark') listStyleType = 'list-style-type:"\\2713  ";';
+        else listStyleType = 'list-style-type:disc;';
+      } else {
+        listStyleType = 'list-style-type:decimal;';
+      }
+
+      const itemsHtml = block.items
+        .map((item) => `<li style="${spacing}">${interpolateHtml(item, data)}</li>`)
+        .join('\n');
+
+      return `<${listTag} style="${absoluteStylesCss(block)};${fontStyle};${listStyleType}">${itemsHtml}</${listTag}>`;
+    }
+
+    case 'chart':
+      return renderChartHtml(block, data);
+
     case 'header':
     case 'footer':
       return block.blocks
@@ -418,4 +490,254 @@ function absoluteStylesCss(block: DocBlock): string {
     parts.push(`pointer-events:auto`);
   }
   return parts.join(';');
+}
+
+function renderBarcodeHtml(
+  block: Extract<DocBlock, { type: 'barcode' }>,
+  data: Record<string, unknown>,
+): string {
+  const value = interpolateHtml(block.value, data) || 'DOCFLOW';
+  const width = block.styles.width ?? 120;
+  const height = block.styles.height ?? 50;
+  const color = block.styles.color ?? '#000000';
+
+  if (block.format === 'qr') {
+    const size = 21;
+    const moduleSize = 4;
+    const svgW = size * moduleSize;
+    const svgH = size * moduleSize;
+
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = value.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const pseudoRandom = () => {
+      const x = Math.sin(hash++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    const matrix: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false));
+
+    const drawFinder = (rowOffset: number, colOffset: number) => {
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+          const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
+          const isCenter = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+          if (isBorder || isCenter) matrix[rowOffset + r]![colOffset + c] = true;
+        }
+      }
+    };
+
+    drawFinder(0, 0);
+    drawFinder(0, size - 7);
+    drawFinder(size - 7, 0);
+
+    for (let i = 7; i < size - 7; i++) {
+      const isEven = i % 2 === 0;
+      matrix[6]![i] = isEven;
+      matrix[i]![6] = isEven;
+    }
+
+    for (let r = 14; r < 17; r++) {
+      for (let c = 14; c < 17; c++) {
+        const isBorder = r === 14 || r === 16 || c === 14 || c === 16;
+        const isCenter = r === 15 && c === 15;
+        if (isBorder || isCenter) matrix[r]![c] = true;
+      }
+    }
+
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const inTopLeftFinder = r < 9 && c < 9;
+        const inTopRightFinder = r < 9 && c >= size - 9;
+        const inBottomLeftFinder = r >= size - 9 && c < 9;
+        const inAlignment = r >= 13 && r <= 17 && c >= 13 && c <= 17;
+        const isTiming = r === 6 || c === 6;
+
+        if (!inTopLeftFinder && !inTopRightFinder && !inBottomLeftFinder && !inAlignment && !isTiming) {
+          matrix[r]![c] = pseudoRandom() > 0.5;
+        }
+      }
+    }
+
+    let rects = '';
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (matrix[r]![c]) {
+          rects += `<rect x="${c * moduleSize}" y="${r * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="${escapeHtml(color)}" />`;
+        }
+      }
+    }
+
+    return `<svg viewBox="0 0 ${svgW} ${svgH}" width="${width}" height="${height}" style="${absoluteStylesCss(block)};${baseStylesCss(block.styles)}">${rects}</svg>`;
+  } else {
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = value.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const pseudoRandom = () => {
+      const x = Math.sin(hash++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    const pattern = [2, 1, 1, 2];
+    for (let i = 0; i < 15; i++) {
+      pattern.push(Math.floor(pseudoRandom() * 3) + 1);
+      pattern.push(Math.floor(pseudoRandom() * 3) + 1);
+    }
+    pattern.push(2, 1, 2, 1);
+
+    const totalUnits = pattern.reduce((sum, val) => sum + val, 0);
+    const svgW = totalUnits * 2;
+
+    let currentX = 0;
+    let rects = '';
+    pattern.forEach((unitCount, idx) => {
+      const isBar = idx % 2 === 0;
+      const stripeWidth = unitCount * 2;
+      if (isBar) {
+        rects += `<rect x="${currentX}" y="0" width="${stripeWidth}" height="${height - 12}" fill="${escapeHtml(color)}" />`;
+      }
+      currentX += stripeWidth;
+    });
+
+    return `
+      <div style="${absoluteStylesCss(block)};display:inline-block;width:${width}px;${baseStylesCss(block.styles)}">
+        <svg viewBox="0 0 ${svgW} ${height - 12}" width="100%" height="${height - 12}" style="display:block;">${rects}</svg>
+        <div style="font-family:sans-serif;font-size:8px;color:${color};text-align:center;margin-top:2px;">${escapeHtml(value)}</div>
+      </div>`;
+  }
+}
+
+function renderChartHtml(
+  block: Extract<DocBlock, { type: 'chart' }>,
+  data: Record<string, unknown>,
+): string {
+  const rawData = resolvePayload(block.loopOver, data);
+  const dataList = Array.isArray(rawData) ? rawData : [];
+
+  const labels: string[] = [];
+  const values: number[] = [];
+
+  dataList.forEach((item) => {
+    if (item && typeof item === 'object') {
+      const label = String((item as any)[block.labelKey] ?? '');
+      const value = parseFloat((item as any)[block.valueKey]);
+      labels.push(label);
+      values.push(isNaN(value) ? 0 : value);
+    }
+  });
+
+  let chartLabels = labels;
+  let chartValues = values;
+  if (chartLabels.length === 0) {
+    chartLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May'];
+    chartValues = [30, 75, 45, 90, 60];
+  }
+
+  const width = block.styles.width ?? 350;
+  const height = block.styles.height ?? 150;
+  const colors = block.styles.colors ?? ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+  if (block.chartType === 'pie') {
+    const total = chartValues.reduce((sum, v) => sum + v, 0) || 1;
+    const radius = Math.min(width, height) * 0.4;
+    const centerX = width / 3;
+    const centerY = height / 2;
+
+    let currentAngle = 0;
+    let paths = '';
+    chartValues.forEach((val, i) => {
+      const sliceAngle = (val / total) * 360;
+      const col = colors[i % colors.length] ?? '#3B82F6';
+
+      const x1 = centerX + radius * Math.cos((currentAngle - 90) * Math.PI / 180);
+      const y1 = centerY + radius * Math.sin((currentAngle - 90) * Math.PI / 180);
+      const x2 = centerX + radius * Math.cos((currentAngle + sliceAngle - 90) * Math.PI / 180);
+      const y2 = centerY + radius * Math.sin((currentAngle + sliceAngle - 90) * Math.PI / 180);
+
+      const largeArcFlag = sliceAngle > 180 ? 1 : 0;
+
+      paths += `<path d="M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z" fill="${escapeHtml(col)}" />`;
+
+      currentAngle += sliceAngle;
+    });
+
+    let legendItems = '';
+    const legendX = (width * 2) / 3 - 10;
+    const legendY = 15;
+    const itemHeight = 14;
+
+    chartValues.forEach((val, i) => {
+      if (i > 8) return;
+      const col = colors[i % colors.length] ?? '#3B82F6';
+      const percent = ((val / total) * 100).toFixed(0);
+      legendItems += `
+        <rect x="${legendX}" y="${legendY + i * itemHeight}" width="8" height="8" fill="${escapeHtml(col)}" />
+        <text x="${legendX + 14}" y="${legendY + i * itemHeight + 7}" font-family="sans-serif" font-size="8px" fill="#374151">${escapeHtml(chartLabels[i] ?? '')}: ${val} (${percent}%)</text>`;
+    });
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="${absoluteStylesCss(block)};${baseStylesCss(block.styles)}">
+        ${paths}
+        ${legendItems}
+      </svg>`;
+  } else {
+    const paddingLeft = 30;
+    const paddingBottom = 20;
+    const paddingTop = 15;
+    const paddingRight = 10;
+    const chartW = width - paddingLeft - paddingRight;
+    const chartH = height - paddingTop - paddingBottom;
+
+    const originX = paddingLeft;
+    const originY = height - paddingBottom;
+
+    const maxVal = Math.max(...chartValues, 1);
+    const barCount = chartValues.length;
+    const barSpacing = chartW / barCount;
+
+    let elements = '';
+
+    elements += `<line x1="${originX}" y1="${originY}" x2="${originX + chartW}" y2="${originY}" stroke="#D1D5DB" stroke-width="1" />`;
+    elements += `<line x1="${originX}" y1="${originY}" x2="${originX}" y2="${paddingTop}" stroke="#D1D5DB" stroke-width="1" />`;
+
+    if (block.chartType === 'bar') {
+      const barWidth = barSpacing * 0.6;
+      chartValues.forEach((val, i) => {
+        const barH = (val / maxVal) * chartH;
+        const barX = originX + i * barSpacing + (barSpacing - barWidth) / 2;
+        const barY = originY - barH;
+        const col = colors[i % colors.length] ?? '#3B82F6';
+
+        elements += `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barH}" fill="${escapeHtml(col)}" />`;
+        elements += `<text x="${barX + barWidth / 2}" y="${barY - 3}" font-family="sans-serif" font-size="7px" font-weight="bold" fill="#374151" text-anchor="middle">${val}</text>`;
+        elements += `<text x="${originX + i * barSpacing + barSpacing / 2}" y="${originY + 12}" font-family="sans-serif" font-size="7px" fill="#6B7280" text-anchor="middle">${escapeHtml(chartLabels[i] ?? '')}</text>`;
+      });
+    } else {
+      let pathPoints = '';
+      chartValues.forEach((val, i) => {
+        const pointX = originX + i * barSpacing + barSpacing / 2;
+        const pointY = originY - (val / maxVal) * chartH;
+        pathPoints += `${i === 0 ? 'M' : 'L'} ${pointX} ${pointY} `;
+      });
+
+      elements += `<path d="${pathPoints}" fill="none" stroke="${escapeHtml(colors[0] ?? '#3B82F6')}" stroke-width="2" />`;
+
+      chartValues.forEach((val, i) => {
+        const pointX = originX + i * barSpacing + barSpacing / 2;
+        const pointY = originY - (val / maxVal) * chartH;
+        const col = colors[0] ?? '#3B82F6';
+
+        elements += `<circle cx="${pointX}" cy="${pointY}" r="3" fill="${escapeHtml(col)}" />`;
+        elements += `<text x="${pointX}" y="${pointY - 4}" font-family="sans-serif" font-size="7px" font-weight="bold" fill="#374151" text-anchor="middle">${val}</text>`;
+        elements += `<text x="${pointX}" y="${originY + 12}" font-family="sans-serif" font-size="7px" fill="#6B7280" text-anchor="middle">${escapeHtml(chartLabels[i] ?? '')}</text>`;
+      });
+    }
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="${absoluteStylesCss(block)};${baseStylesCss(block.styles)}">
+        ${elements}
+      </svg>`;
+  }
 }

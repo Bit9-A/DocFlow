@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Canvas } from '@/components/canvas/Canvas';
 import { BlockToolbar } from '@/components/toolbar/BlockToolbar';
 import { StyleInspector } from '@/components/sidebar/StyleInspector';
@@ -11,6 +11,11 @@ import { useUIStore } from '@/store/useUIStore';
 import { PanelRightOpen, PanelRightClose, Plus, X } from 'lucide-react';
 
 export default function EditorPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const breakpoint = useUIStore((s) => s.breakpoint);
   const setBreakpoint = useUIStore((s) => s.setBreakpoint);
   const isMobileToolbarOpen = useUIStore((s) => s.isMobileToolbarOpen);
@@ -22,6 +27,8 @@ export default function EditorPage() {
   const isInspectorOpen = useUIStore((s) => s.isInspectorOpen);
   const setToolbarOpen = useUIStore((s) => s.setToolbarOpen);
   const setInspectorOpen = useUIStore((s) => s.setInspectorOpen);
+
+
 
   // Responsive breakpoint detection
   useEffect(() => {
@@ -138,6 +145,14 @@ export default function EditorPage() {
 
   const isDesktop = breakpoint === 'desktop';
   const isTablet = breakpoint === 'tablet';
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-screen bg-[#0d0d1f] overflow-hidden items-center justify-center text-white/50 text-xs">
+        Loading editor session...
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-[#0d0d1f] overflow-hidden">

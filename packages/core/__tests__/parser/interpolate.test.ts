@@ -75,6 +75,18 @@ describe('resolvePayload', () => {
     const inherited = Object.create({ inherited: 'yes' }) as Record<string, unknown>;
     expect(resolvePayload('inherited', inherited)).toBe('');
   });
+
+  it('resolves array indices using dot-notation', () => {
+    const arrayData = {
+      items: [
+        { name: 'First' },
+        { name: 'Second' }
+      ]
+    };
+    expect(resolvePayload('items.0.name', arrayData)).toBe('First');
+    expect(resolvePayload('items.1.name', arrayData)).toBe('Second');
+    expect(resolvePayload('items.2.name', arrayData)).toBe('');
+  });
 });
 
 // ============================================================

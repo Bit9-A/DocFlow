@@ -42,11 +42,12 @@ interface Props {
   block: DocBlock;
   isSelected: boolean;
   onSelect: () => void;
-  parentType?: 'header' | 'footer';
+  parentType?: 'header' | 'footer' | 'columns';
+  isNested?: boolean;
 }
 
 // ─── Component ──────────────────────────────────────────
-export function SortableBlock({ block, isSelected, onSelect, parentType }: Props) {
+export function SortableBlock({ block, isSelected, onSelect, parentType, isNested = false }: Props) {
   const updateBlock = useDocumentStore((s) => s.updateBlock);
   const metadata = useDocumentStore((s) => s.metadata);
   const ast = useDocumentStore((s) => s.ast);
@@ -111,7 +112,7 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
   const handleDragStart = (e: React.PointerEvent) => {
     e.stopPropagation();
     onSelect();
-    if (locked) return;
+    if (locked || isNested) return;
 
     const ann = document.getElementById('canvas-announcer');
     if (ann) ann.textContent = `Picked up ${block.type} block`;
@@ -291,7 +292,7 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
   return (
     <>
       {/* Alignment guide lines */}
-      {isDragging && guides.length > 0 && (
+      {isDragging && guides.length > 0 && !isNested && (
         <svg
           className="pointer-events-none absolute inset-0 z-[200]"
           style={{ left: 0, top: 0, width: paperW, height: paperH }}
@@ -312,7 +313,11 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
       {/* Block */}
       <div
         ref={blockRef}
-        style={{
+        style={isNested ? {
+          position: 'relative',
+          width: '100%',
+          minHeight: '28px',
+        } : {
           position: 'absolute',
           left: blockX,
           top: blockY,
@@ -326,7 +331,7 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
         aria-label={`${block.type} block${isSelected ? ', selected' : ''}`}
         aria-selected={isSelected}
         className={`
-          absolute group outline-none rounded
+          ${isNested ? 'relative' : 'absolute'} group outline-none rounded
           ${isSelected
             ? 'ring-2 ring-indigo-500 ring-offset-2'
             : 'hover:ring-1 hover:ring-indigo-300/40 hover:ring-offset-1 focus-visible:ring-1 focus-visible:ring-indigo-400 focus-visible:ring-offset-1'}
@@ -344,7 +349,7 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
             title="Block is locked" aria-label="Block is locked">
             <Lock size={12} />
           </div>
-        ) : (
+        ) : isNested ? null : (
           <button
             onPointerDown={handleDragStart}
             className={`
@@ -368,7 +373,7 @@ export function SortableBlock({ block, isSelected, onSelect, parentType }: Props
         </div>
 
         {/* Resize handle — bigger, always visible on select */}
-        {isSelected && !locked && (
+        {isSelected && !locked && !isNested && (
           <div
             onPointerDown={handleResizeStart}
             className={`
