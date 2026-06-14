@@ -363,6 +363,18 @@ export const useDocumentStore = create<DocumentState>()(
 
       exportSchema: (): DocFlowSchema => {
         const { ast, metadata } = get();
+        let currentPageIdx = 0;
+        const resolvedAst = ast.map((block) => {
+          if (block.type === 'header' || block.type === 'footer') {
+            return block;
+          }
+          const updatedBlock = { ...block, page: currentPageIdx };
+          if (block.type === 'page-break') {
+            currentPageIdx++;
+          }
+          return updatedBlock;
+        });
+
         return {
           $schema: 'https://docflow.dev/schemas/v1.json',
           version: '1.0.0',
@@ -370,7 +382,7 @@ export const useDocumentStore = create<DocumentState>()(
             ...metadata,
             createdAt: new Date().toISOString(),
           },
-          ast,
+          ast: resolvedAst,
         };
       },
 

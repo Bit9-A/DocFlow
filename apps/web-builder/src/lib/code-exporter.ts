@@ -391,6 +391,10 @@ export function exportToPdfKit(schema: DocFlowSchema, lang: 'typescript' | 'java
 
     code += `  // Block ID: ${block.id} (${block.type})\n`;
     code += renderBlockToCode(block, schema, '  ');
+
+    if (block.type === 'page-break') {
+      currentPage++;
+    }
   }
 
   if (headerBlock || footerBlock) {

@@ -444,4 +444,49 @@ describe('Integration: full schema → code export', () => {
     expect(code).toContain('"items"');
     expect(code).toContain('"name": "A"');
   });
+
+  it('handles page-breaks and sequential page indices without duplicate addPage calls', () => {
+    const schema: DocFlowSchema = {
+      $schema: 'https://docflow.dev/schemas/v1.json',
+      version: '1.0.0',
+      metadata: {
+        title: 'Multi-page Test',
+        pageSize: 'LETTER',
+        orientation: 'portrait',
+        margins: { top: 40, bottom: 40, left: 50, right: 50 },
+      },
+      ast: [
+        {
+          id: 'h1',
+          type: 'heading',
+          text: 'Heading 1',
+          level: 1,
+          styles: {},
+          page: 0,
+        },
+        {
+          id: 'pb1',
+          type: 'page-break',
+          styles: {},
+          page: 0,
+        },
+        {
+          id: 'p2',
+          type: 'paragraph',
+          text: 'Paragraph on page 2',
+          styles: {},
+          page: 1,
+        },
+      ],
+    };
+
+    const code = exportToPdfKit(schema, 'javascript');
+
+    // Count how many times doc.addPage() is generated in the code
+    const addPageMatches = code.match(/doc\.addPage\(\)/g);
+    expect(addPageMatches).not.toBeNull();
+    // It should be exactly 1 time (triggered by the page-break block,
+    // and not duplicated by the page transition between page 0 and 1)
+    expect(addPageMatches!.length).toBe(1);
+  });
 });

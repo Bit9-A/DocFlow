@@ -58,18 +58,23 @@ export class PdfKitAdapter implements DocAdapter<Buffer> {
     };
 
     let blocksProcessed = 0;
+    let currentPageIdx = 0;
 
     for (const block of schema.ast) {
       if (block.type === 'header' || block.type === 'footer') {
         continue;
       }
-      const targetPageIdx = block.page ?? 0;
+      const targetPageIdx = block.page ?? currentPageIdx;
 
       while (doc.bufferedPageRange().count <= targetPageIdx) {
         doc.addPage();
       }
 
       doc.switchToPage(targetPageIdx);
+      if (block.page !== undefined) {
+        currentPageIdx = block.page;
+      }
+      
       ctx.isAbsolute = block.x !== undefined || block.y !== undefined;
 
       if (block.x !== undefined || block.y !== undefined) {
@@ -79,6 +84,11 @@ export class PdfKitAdapter implements DocAdapter<Buffer> {
 
       const renderer = getPdfBlockRenderer(block.type);
       renderer(block, ctx);
+      
+      if (block.type === 'page-break') {
+        currentPageIdx++;
+      }
+      
       blocksProcessed++;
     }
 
