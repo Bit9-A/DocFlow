@@ -26,4 +26,23 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+nul
 ./docs/*
+
+# Testing & Coverage
+coverage/
+**/coverage/
+playwright-report/
+test-results/
+
+# TypeScript Build Info
+*.tsbuildinfo
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# IDEs
+.vscode/
+.idea/
