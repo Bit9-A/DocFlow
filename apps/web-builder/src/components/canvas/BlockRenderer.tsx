@@ -787,6 +787,13 @@ export function BlockRenderer({ block, isSelected: _isSelected }: BlockRendererP
         const barCount = chartValues.length;
         const barSpacing = chartW / barCount;
 
+        let pathPoints = '';
+        chartValues.forEach((val, i) => {
+          const pointX = originX + i * barSpacing + barSpacing / 2;
+          const pointY = originY - (val / maxVal) * chartH;
+          pathPoints += `${i === 0 ? 'M' : 'L'} ${pointX} ${pointY} `;
+        });
+
         return (
           <div style={{ width: `${width}px`, height: `${height}px` }} className="bg-white border rounded p-2 flex items-center justify-center select-none shadow-sm">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">

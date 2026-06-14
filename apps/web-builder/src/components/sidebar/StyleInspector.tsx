@@ -1776,7 +1776,7 @@ function PageNumberPropertiesPanel({ block, updateBlock, isMobile }: { block: an
           className={`w-full bg-white/5 text-white/70 rounded border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono ${isMobile ? 'text-sm px-3 py-2.5' : 'text-xs px-2 py-1.5'}`}
           placeholder="Página {{currentPage}} de {{totalPages}}"
         />
-        <p className="text-[9px] text-white/30 mt-1">Variables: `{{currentPage}}`, `{{totalPages}}`</p>
+        <p className="text-[9px] text-white/30 mt-1">Variables: `{"{{currentPage}}"}`, `{"{{totalPages}}"}`</p>
       </div>
     </InspectorSection>
   );
